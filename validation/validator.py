@@ -47,22 +47,18 @@ def validate(ev: ExtractedEvent) -> ExtractedEvent:
     if not (0.0 <= ev.confidence <= 1.0):
         errors.append(f"confidence {ev.confidence} is outside [0, 1]")
 
-    if ev.event_type not in config.EVENT_TYPES:
-        # Normalise unknown types to "Other" rather than hard-rejecting
-        ev.event_type = "Other"
+    valid_vibes = {
+        "social", "career", "academic", "arts", "culture",
+        "outdoors", "sports", "food", "wellness", "volunteering",
+    }
+    ev.vibes = [v for v in ev.vibes if v in valid_vibes] or ["social"]
 
     ev.validation_errors = errors
 
     # ── status assignment ────────────────────────────────────────────────────
-    if errors:
+    if errors or not ev.is_event or ev.confidence < config.CONFIDENCE_REVIEW:
         ev.status = "rejected"
-    elif not ev.is_event:
-        ev.status = "rejected"
-    elif ev.confidence >= config.CONFIDENCE_PUBLISH:
-        ev.status = "published"
-    elif ev.confidence >= config.CONFIDENCE_REVIEW:
-        ev.status = "review"
     else:
-        ev.status = "rejected"
+        ev.status = "review"
 
     return ev

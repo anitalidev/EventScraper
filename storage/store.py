@@ -32,25 +32,36 @@ CREATE TABLE IF NOT EXISTS raw_posts (
 );
 
 CREATE TABLE IF NOT EXISTS events (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    dedupe_key          TEXT UNIQUE,
-    status              TEXT NOT NULL DEFAULT 'review',
-    confidence          REAL,
-    confidence_reason   TEXT,
-    title               TEXT NOT NULL,
-    date                TEXT,
-    time                TEXT,
-    location            TEXT,
-    description         TEXT,
-    source_url          TEXT NOT NULL,
-    organizer           TEXT,
-    event_type          TEXT,
-    is_event            INTEGER,
-    raw_ai_response     TEXT,
-    validation_errors   TEXT,
-    stored_at           TEXT NOT NULL
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    dedupe_key              TEXT UNIQUE,
+    status                  TEXT NOT NULL DEFAULT 'review',
+    confidence              REAL,
+    confidence_reason       TEXT,
+    title                   TEXT NOT NULL,
+    date                    TEXT,
+    time                    TEXT,
+    location                TEXT,
+    description             TEXT,
+    source_url              TEXT NOT NULL,
+    organizer               TEXT,
+    vibes                   TEXT,
+    is_event                INTEGER,
+    raw_ai_response         TEXT,
+    validation_errors       TEXT,
+    stored_at               TEXT NOT NULL,
+    ubc_discovery_event_id  TEXT,
+    approved_at             TEXT,
+    approval_error          TEXT
 );
+
 """
+
+_MIGRATIONS = [
+    "ALTER TABLE events ADD COLUMN ubc_discovery_event_id TEXT",
+    "ALTER TABLE events ADD COLUMN approved_at TEXT",
+    "ALTER TABLE events ADD COLUMN approval_error TEXT",
+    "ALTER TABLE events ADD COLUMN vibes TEXT",
+]
 
 
 def _connect() -> sqlite3.Connection:
@@ -58,6 +69,11 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(config.DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(_SCHEMA)
+    for migration in _MIGRATIONS:
+        try:
+            conn.execute(migration)
+        except sqlite3.OperationalError:
+            pass  # column already exists
     conn.commit()
     return conn
 
@@ -99,7 +115,7 @@ def save_events(events: list[ExtractedEvent]) -> dict[str, int]:
         conn.execute(
             """INSERT OR IGNORE INTO events
                (dedupe_key, status, confidence, confidence_reason, title, date, time,
-                location, description, source_url, organizer, event_type, is_event,
+                location, description, source_url, organizer, vibes, is_event,
                 raw_ai_response, validation_errors, stored_at)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
@@ -114,7 +130,7 @@ def save_events(events: list[ExtractedEvent]) -> dict[str, int]:
                 ev.description,
                 ev.source_url,
                 ev.organizer,
-                ev.event_type,
+                json.dumps(ev.vibes),
                 int(ev.is_event),
                 ev.raw_ai_response,
                 json.dumps(ev.validation_errors),
@@ -147,7 +163,7 @@ def fetch_events(status: Optional[str] = None, limit: int = 200) -> list[dict]:
 def search_events(
     q: str = "",
     status: Optional[str] = None,
-    event_type: Optional[str] = None,
+    vibe: Optional[str] = None,
     limit: int = 200,
 ) -> list[dict]:
     conn = _connect()
@@ -157,9 +173,9 @@ def search_events(
     if status:
         clauses.append("status = ?")
         params.append(status)
-    if event_type:
-        clauses.append("event_type = ?")
-        params.append(event_type)
+    if vibe:
+        clauses.append("vibes LIKE ?")
+        params.append(f"%{vibe}%")
     if q:
         pattern = f"%{q}%"
         clauses.append(
@@ -183,7 +199,7 @@ def get_event(event_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
-_EDITABLE_FIELDS = {"title", "date", "time", "location", "description", "event_type", "organizer"}
+_EDITABLE_FIELDS = {"title", "date", "time", "location", "description", "vibes", "organizer"}
 
 
 def update_event(event_id: int, fields: dict) -> Optional[dict]:
@@ -238,3 +254,57 @@ def status_counts() -> dict[str, int]:
     ).fetchall()
     conn.close()
     return {r["status"]: r["n"] for r in rows}
+
+
+def delete_event(event_id: int) -> bool:
+    conn = _connect()
+    cur = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    deleted = cur.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+
+
+def record_ubc_publish(
+    event_id: int,
+    ubc_event_id: Optional[str],
+    error: Optional[str] = None,
+) -> Optional[dict]:
+    """
+    After a UBC Discovery publish attempt, store the result.
+    On success: sets ubc_discovery_event_id, approved_at, status=published, clears approval_error.
+    On failure: sets approval_error, leaves status unchanged.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _connect()
+    if ubc_event_id is not None:
+        conn.execute(
+            """UPDATE events
+               SET ubc_discovery_event_id = ?, approved_at = ?, status = 'published',
+                   approval_error = NULL
+               WHERE id = ?""",
+            (ubc_event_id, now, event_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE events SET approval_error = ? WHERE id = ?",
+            (error, event_id),
+        )
+    conn.commit()
+    row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def bulk_delete(event_ids: list[int]) -> int:
+    if not event_ids:
+        return 0
+    placeholders = ",".join("?" * len(event_ids))
+    conn = _connect()
+    cur = conn.execute(
+        f"DELETE FROM events WHERE id IN ({placeholders})", event_ids
+    )
+    count = cur.rowcount
+    conn.commit()
+    conn.close()
+    return count

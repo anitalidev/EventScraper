@@ -40,9 +40,10 @@ class _SingleEvent(BaseModel):
     description: str = Field(description="1-2 sentence summary of what the event is.")
     source_url: str = Field(description="The Instagram post URL provided.")
     organizer: str = Field(description="The @username of the account that posted.")
-    event_type: str = Field(description=(
-        "One of: Workshop, Networking, Career, Social, Academic, Sports, "
-        "Wellness, Volunteer, Arts, Culture, Food, Other."
+    vibes: list[str] = Field(description=(
+        "One or more vibes that best describe this event. "
+        "Choose only from: social, career, academic, arts, culture, "
+        "outdoors, sports, food, wellness, volunteering."
     ))
 
 
@@ -68,6 +69,10 @@ ACCEPT (set is_event=true) only when the post describes an event that:
 - Has (or implies) a specific date
 - Is open to attendees
 - Is not just a recurring programme announcement with no specifics
+
+For vibes, pick one or more from this fixed list that best describe the event's
+feel or intent: social, career, academic, arts, culture, outdoors, sports,
+food, wellness, volunteering. Do not invent new vibe values.
 
 Assign confidence based on how many concrete details are present:
 - 0.9+ : date, time, location, and clear title all present
@@ -111,7 +116,7 @@ class OpenAIExtractor(BaseExtractor):
                 description=item.description,
                 source_url=item.source_url or (post.post_url if post else ""),
                 organizer=item.organizer,
-                event_type=item.event_type,
+                vibes=item.vibes,
                 raw_ai_response=item.model_dump_json(),
                 source_post=post,
             )

@@ -1,5 +1,8 @@
 """Central configuration — all tunables in one place."""
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ── OpenAI ─────────────────────────────────────────────────────────────────
 OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")
@@ -27,6 +30,10 @@ UA: str = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 Chrome/124 Safari/537.36"
 )
+
+# ── UBC Discovery integration ───────────────────────────────────────────────
+UBC_DISCOVERY_API_URL: str = os.environ.get("UBC_DISCOVERY_API_URL", "")
+UBC_DISCOVERY_API_KEY: str = os.environ.get("UBC_DISCOVERY_API_KEY", "")
 
 EVENT_TYPES = [
     "Workshop", "Networking", "Career", "Social", "Academic",

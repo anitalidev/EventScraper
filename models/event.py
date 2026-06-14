@@ -47,7 +47,7 @@ class ExtractedEvent:
     description: str
     source_url: str
     organizer: str
-    event_type: str              # one of config.EVENT_TYPES
+    vibes: list[str]             # subset of UBC Discovery vibe taxonomy
     status: str = "review"       # published | review | rejected
     dedupe_key: Optional[str] = None
     raw_ai_response: Optional[str] = None

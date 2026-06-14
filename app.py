@@ -7,11 +7,19 @@ import os
 from flask import Flask, jsonify, render_template, request
 
 import config
+from integrations.ubc_discovery import (
+    UBCDiscoveryConflict,
+    UBCDiscoveryError,
+    publish_event,
+)
 from pipeline.runner import run
 from storage.store import (
+    bulk_delete,
     bulk_set_status,
+    delete_event,
     fetch_events,
     get_event,
+    record_ubc_publish,
     search_events,
     set_event_status,
     status_counts,
@@ -85,7 +93,7 @@ def api_events():
     rows = search_events(
         q=request.args.get("q", ""),
         status=request.args.get("status") or None,
-        event_type=request.args.get("event_type") or None,
+        vibe=request.args.get("vibe") or None,
         limit=int(request.args.get("limit", 200)),
     )
     return jsonify(rows)
@@ -117,6 +125,10 @@ def api_update_event(event_id: int):
 def api_set_status(event_id: int):
     body = request.get_json(force=True) or {}
     new_status = body.get("status", "")
+
+    if new_status == "published":
+        return _approve_and_publish(event_id)
+
     try:
         row = set_event_status(event_id, new_status)
     except ValueError as e:
@@ -126,13 +138,56 @@ def api_set_status(event_id: int):
     return jsonify(row)
 
 
+def _approve_and_publish(event_id: int):
+    """
+    Human-approval gate: push the event to UBC Discovery, then mark it
+    published locally.  If UBC Discovery is not configured, fall back to
+    local-only publish so development still works.
+    """
+    event = get_event(event_id)
+    if event is None:
+        return jsonify({"error": "Not found"}), 404
+
+    if not config.UBC_DISCOVERY_API_URL:
+        # Not configured — local-only approve (dev/test mode).
+        row = set_event_status(event_id, "published")
+        return jsonify({**row, "ubc_discovery_skipped": True})
+
+    try:
+        created = publish_event(event)
+        row = record_ubc_publish(event_id, ubc_event_id=created.ubc_event_id)
+        return jsonify(row)
+
+    except UBCDiscoveryConflict as e:
+        # Already exists in UBC Discovery — treat as success, store their ID.
+        row = record_ubc_publish(event_id, ubc_event_id=e.existing_id)
+        return jsonify({**row, "ubc_discovery_conflict": True})
+
+    except (UBCDiscoveryError, Exception) as e:
+        # API call failed — record the error, do NOT mark published.
+        record_ubc_publish(event_id, ubc_event_id=None, error=str(e))
+        return jsonify({"error": f"UBC Discovery publish failed: {e}"}), 502
+
+
+@app.route("/api/events/<int:event_id>", methods=["DELETE"])
+def api_delete_event(event_id: int):
+    deleted = delete_event(event_id)
+    if not deleted:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"deleted": event_id})
+
+
 @app.route("/api/events/bulk", methods=["POST"])
 def api_bulk():
     body = request.get_json(force=True) or {}
     ids = body.get("ids", [])
-    new_status = body.get("status", "")
+    action = body.get("action", "status")   # "status" | "delete"
     if not ids:
         return jsonify({"error": "No ids provided"}), 400
+    if action == "delete":
+        count = bulk_delete([int(i) for i in ids])
+        return jsonify({"deleted": count})
+    new_status = body.get("status", "")
     try:
         count = bulk_set_status([int(i) for i in ids], new_status)
     except ValueError as e:

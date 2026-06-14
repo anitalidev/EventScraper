@@ -23,225 +23,107 @@
     --red-bg:   #1f0808;
     --accent:   #e1306c;
   }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
-  /* ── Layout ──────────────────────────────────────────────────────────── */
-  .topbar {
-    position: sticky; top: 0; z-index: 100;
-    background: rgba(13,13,13,.92);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--border);
-    padding: 0 1.5rem;
-    height: 52px;
-    display: flex; align-items: center; gap: 1.5rem;
-  }
-  .topbar-brand {
-    font-size: 0.95rem; font-weight: 700;
-    background: linear-gradient(90deg, #e1306c, #d6249f);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    white-space: nowrap;
-  }
+  /* topbar */
+  .topbar { position: sticky; top: 0; z-index: 100; background: rgba(13,13,13,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); padding: 0 1.5rem; height: 52px; display: flex; align-items: center; gap: 1.5rem; }
+  .topbar-brand { font-size: 0.95rem; font-weight: 700; background: linear-gradient(90deg,#e1306c,#d6249f); -webkit-background-clip: text; -webkit-text-fill-color: transparent; white-space: nowrap; }
   .topbar-nav { display: flex; gap: 0.1rem; }
-  .topbar-nav a {
-    font-size: 0.82rem; color: var(--muted2);
-    text-decoration: none; padding: 0.35rem 0.7rem;
-    border-radius: 6px; transition: background 0.15s, color 0.15s;
-  }
+  .topbar-nav a { font-size: 0.82rem; color: var(--muted2); text-decoration: none; padding: 0.35rem 0.7rem; border-radius: 6px; transition: background .15s,color .15s; }
   .topbar-nav a:hover { background: var(--surface2); color: var(--text); }
   .topbar-nav a.active { background: var(--surface2); color: var(--text); }
   .topbar-spacer { flex: 1; }
-  #countBadges { display: flex; gap: 0.5rem; }
 
+  /* layout */
   .layout { display: flex; height: calc(100vh - 52px); overflow: hidden; }
 
-  /* ── Sidebar ──────────────────────────────────────────────────────────── */
-  .sidebar {
-    width: 220px; flex-shrink: 0;
-    border-right: 1px solid var(--border);
-    padding: 1.2rem 0.9rem;
-    overflow-y: auto;
-    display: flex; flex-direction: column; gap: 0.25rem;
-  }
-  .sidebar-label {
-    font-size: 0.7rem; text-transform: uppercase;
-    letter-spacing: 0.1em; color: var(--muted);
-    padding: 0 0.5rem; margin: 0.8rem 0 0.3rem;
-  }
+  /* sidebar */
+  .sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 1.2rem 0.9rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.25rem; }
+  .sidebar-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); padding: 0 0.5rem; margin: 0.8rem 0 0.3rem; }
   .sidebar-label:first-child { margin-top: 0; }
-  .sidebar-btn {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0.42rem 0.6rem;
-    border-radius: 7px; border: none; background: transparent;
-    color: var(--muted2); font-size: 0.85rem; cursor: pointer;
-    transition: background 0.12s, color 0.12s; width: 100%; text-align: left;
-  }
+  .sidebar-btn { display: flex; align-items: center; justify-content: space-between; padding: 0.42rem 0.6rem; border-radius: 7px; border: none; background: transparent; color: var(--muted2); font-size: 0.85rem; cursor: pointer; transition: background .12s,color .12s; width: 100%; text-align: left; }
   .sidebar-btn:hover { background: var(--surface2); color: var(--text); }
   .sidebar-btn.active { background: var(--surface2); color: var(--text); font-weight: 600; }
-  .sidebar-count {
-    font-size: 0.72rem; padding: 0.1rem 0.45rem;
-    border-radius: 999px; background: var(--surface2); color: var(--muted2);
-  }
+  .sidebar-count { font-size: 0.72rem; padding: 0.1rem 0.45rem; border-radius: 999px; background: var(--surface2); color: var(--muted2); }
   .sidebar-btn.active .sidebar-count { background: var(--border2); }
 
-  /* ── Main content ─────────────────────────────────────────────────────── */
+  /* main */
   .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-
-  .toolbar {
-    padding: 0.9rem 1.4rem;
-    border-bottom: 1px solid var(--border);
-    display: flex; gap: 0.75rem; align-items: center; flex-shrink: 0;
-  }
+  .toolbar { padding: 0.9rem 1.4rem; border-bottom: 1px solid var(--border); display: flex; gap: 0.75rem; align-items: center; flex-shrink: 0; }
   .search-wrap { position: relative; flex: 1; max-width: 380px; }
-  .search-wrap input {
-    width: 100%;
-    background: var(--surface2); border: 1px solid var(--border2);
-    border-radius: 8px; color: var(--text);
-    padding: 0.48rem 0.8rem 0.48rem 2.1rem;
-    font-size: 0.88rem; outline: none;
-    transition: border-color 0.15s;
-  }
+  .search-wrap input { width: 100%; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; color: var(--text); padding: 0.48rem 0.8rem 0.48rem 2.1rem; font-size: 0.88rem; outline: none; transition: border-color .15s; }
   .search-wrap input:focus { border-color: var(--accent); }
-  .search-icon {
-    position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%);
-    color: var(--muted); font-size: 0.9rem; pointer-events: none;
-  }
-  .type-select {
-    background: var(--surface2); border: 1px solid var(--border2);
-    border-radius: 8px; color: var(--text);
-    padding: 0.48rem 0.7rem; font-size: 0.85rem; outline: none; cursor: pointer;
-  }
-  .type-select option { background: var(--surface); }
+  .search-icon { position: absolute; left: 0.62rem; top: 50%; transform: translateY(-50%); color: var(--muted); display: flex; pointer-events: none; }
 
   /* bulk bar */
-  #bulkBar {
-    display: none; align-items: center; gap: 0.75rem;
-    margin-left: auto;
-  }
+  #bulkBar { display: none; align-items: center; gap: 0.75rem; margin-left: auto; }
   #bulkBar.visible { display: flex; }
   #selectedCount { font-size: 0.82rem; color: var(--muted2); }
-  .bulk-btn {
-    font-size: 0.8rem; font-weight: 600; padding: 0.38rem 0.9rem;
-    border-radius: 7px; border: 1px solid; cursor: pointer;
-    transition: opacity 0.15s;
-  }
+  .bulk-btn { font-size: 0.8rem; font-weight: 600; padding: 0.38rem 0.9rem; border-radius: 7px; border: 1px solid; cursor: pointer; transition: opacity .15s; display: flex; align-items: center; gap: 0.35rem; }
   .bulk-btn:hover { opacity: 0.8; }
   .bulk-approve { background: var(--green-bg); color: var(--green); border-color: #166534; }
   .bulk-reject  { background: var(--red-bg);   color: var(--red);   border-color: #7f1d1d; }
+  .bulk-delete  { background: #1a0a0a;          color: #f87171;      border-color: #5a1a1a; }
   .bulk-clear   { background: transparent; color: var(--muted2); border-color: var(--border2); }
 
   /* event list */
   .event-list { flex: 1; overflow-y: auto; padding: 1rem 1.4rem; }
-  .empty-state {
-    text-align: center; padding: 4rem 1rem;
-    color: var(--muted); font-size: 0.9rem;
-  }
+  .empty-state { text-align: center; padding: 4rem 1rem; color: var(--muted); font-size: 0.9rem; }
 
   /* event row */
-  .event-row {
-    display: flex; align-items: flex-start; gap: 0.8rem;
-    padding: 1rem;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 3px solid transparent;
-    border-radius: 10px;
-    margin-bottom: 0.65rem;
-    transition: border-color 0.15s;
-  }
+  .event-row { display: flex; align-items: flex-start; gap: 0.8rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid transparent; border-radius: 10px; margin-bottom: 0.65rem; transition: border-color .15s; }
   .event-row.published { border-left-color: var(--green); }
   .event-row.review    { border-left-color: var(--amber); }
   .event-row.rejected  { border-left-color: var(--red); opacity: 0.6; }
   .event-row.selected  { background: #1a1020; border-color: #5a1a5a; }
-
   .row-check { padding-top: 0.1rem; }
-  .row-check input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
-
+  .row-check input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
   .row-body { flex: 1; min-width: 0; }
   .row-header { display: flex; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
   .row-title { font-size: 0.93rem; font-weight: 600; flex: 1; min-width: 0; }
-  .badge {
-    font-size: 0.68rem; font-weight: 600; padding: 0.15rem 0.5rem;
-    border-radius: 999px; white-space: nowrap; flex-shrink: 0;
-  }
+  .badge { font-size: 0.68rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
   .badge-published { background: var(--green-bg); color: var(--green); }
   .badge-review    { background: var(--amber-bg); color: var(--amber); }
   .badge-rejected  { background: var(--red-bg);   color: var(--red); }
   .badge-type      { background: var(--surface2);  color: var(--muted2); }
-
   .row-meta { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.78rem; color: var(--muted2); margin-bottom: 0.35rem; }
-  .row-meta span { display: flex; align-items: center; gap: 0.2rem; }
+  .row-meta span { display: flex; align-items: center; gap: 0.3rem; }
   .row-desc { font-size: 0.82rem; color: #bbb; line-height: 1.5; margin-bottom: 0.4rem; }
-
   .conf-row { display: flex; align-items: center; gap: 0.5rem; }
   .conf-bar-wrap { flex: 1; max-width: 120px; height: 3px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
   .conf-bar { height: 100%; border-radius: 2px; }
   .conf-high   { background: var(--green); }
   .conf-medium { background: var(--amber); }
   .conf-low    { background: var(--red); }
-  .conf-label { font-size: 0.72rem; color: var(--muted); }
+  .conf-label  { font-size: 0.72rem; color: var(--muted); }
   .conf-reason { font-size: 0.72rem; color: var(--muted); font-style: italic; margin-left: 0.3rem; }
-
   .row-actions { display: flex; gap: 0.4rem; flex-shrink: 0; flex-direction: column; align-items: flex-end; }
-  .action-btn {
-    font-size: 0.75rem; font-weight: 600; padding: 0.3rem 0.7rem;
-    border-radius: 6px; border: 1px solid; cursor: pointer; white-space: nowrap;
-    transition: opacity 0.15s; background: transparent;
-  }
+  .action-btn { font-size: 0.75rem; font-weight: 600; padding: 0.3rem 0.7rem; border-radius: 6px; border: 1px solid; cursor: pointer; white-space: nowrap; transition: opacity .15s; background: transparent; display: flex; align-items: center; gap: 0.3rem; }
   .action-btn:hover { opacity: 0.75; }
+  .action-btn:disabled { opacity: 0.3; cursor: default; }
   .btn-approve { color: var(--green); border-color: #166534; }
   .btn-reject  { color: var(--red);   border-color: #7f1d1d; }
+  .btn-review  { color: var(--amber); border-color: #78350f; }
   .btn-edit    { color: var(--muted2); border-color: var(--border2); }
-  .btn-review  { color: var(--amber);  border-color: #78350f; }
-  .action-btn:disabled { opacity: 0.3; cursor: default; }
-  .ig-link { font-size: 0.75rem; color: var(--accent); text-decoration: none; }
+  .btn-delete  { color: #f87171; border-color: #5a1a1a; }
+  .ig-link { font-size: 0.75rem; color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.4rem; }
   .ig-link:hover { text-decoration: underline; }
 
-  /* ── Edit modal ────────────────────────────────────────────────────────── */
-  .modal-backdrop {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,.7); z-index: 200;
-    align-items: center; justify-content: center;
-  }
+  /* modal */
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 200; align-items: center; justify-content: center; }
   .modal-backdrop.open { display: flex; }
-  .modal {
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: 14px;
-    padding: 1.75rem;
-    width: min(560px, 95vw);
-    max-height: 90vh;
-    overflow-y: auto;
-  }
+  .modal { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 1.75rem; width: min(560px,95vw); max-height: 90vh; overflow-y: auto; }
   .modal h2 { font-size: 1rem; font-weight: 700; margin-bottom: 1.2rem; }
   .modal-fields { display: flex; flex-direction: column; gap: 0.9rem; }
   .modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
   .modal-field { display: flex; flex-direction: column; gap: 0.3rem; }
   .modal-field label { font-size: 0.76rem; color: var(--muted2); }
-  .modal-field input,
-  .modal-field select,
-  .modal-field textarea {
-    background: var(--surface2); border: 1px solid var(--border2);
-    border-radius: 8px; color: var(--text);
-    padding: 0.5rem 0.7rem; font-size: 0.88rem; outline: none;
-    transition: border-color 0.15s; font-family: inherit;
-  }
-  .modal-field input:focus,
-  .modal-field select:focus,
-  .modal-field textarea:focus { border-color: var(--accent); }
+  .modal-field input, .modal-field select, .modal-field textarea { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; color: var(--text); padding: 0.5rem 0.7rem; font-size: 0.88rem; outline: none; transition: border-color .15s; font-family: inherit; }
+  .modal-field input:focus, .modal-field select:focus, .modal-field textarea:focus { border-color: var(--accent); }
   .modal-field textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
   .modal-field select option { background: var(--surface); }
-  .modal-footer {
-    display: flex; gap: 0.6rem; justify-content: flex-end;
-    margin-top: 1.4rem; padding-top: 1rem; border-top: 1px solid var(--border);
-  }
-  .modal-btn {
-    font-size: 0.86rem; font-weight: 600; padding: 0.5rem 1.2rem;
-    border-radius: 8px; border: none; cursor: pointer; transition: opacity 0.15s;
-  }
+  .modal-footer { display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 1.4rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .modal-btn { font-size: 0.86rem; font-weight: 600; padding: 0.5rem 1.2rem; border-radius: 8px; border: none; cursor: pointer; transition: opacity .15s; display: flex; align-items: center; gap: 0.4rem; }
   .modal-btn:hover { opacity: 0.85; }
   .modal-save    { background: var(--accent); color: #fff; }
   .modal-approve { background: var(--green-bg); color: var(--green); border: 1px solid #166534; }
@@ -249,16 +131,7 @@
   .modal-err { font-size: 0.8rem; color: var(--red); margin-top: 0.5rem; display: none; }
 
   /* toast */
-  #toast {
-    position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 300;
-    background: var(--surface2); border: 1px solid var(--border2);
-    border-radius: 10px; padding: 0.75rem 1.2rem;
-    font-size: 0.85rem; color: var(--text);
-    box-shadow: 0 8px 30px rgba(0,0,0,.4);
-    transform: translateY(20px); opacity: 0;
-    transition: transform 0.25s, opacity 0.25s;
-    pointer-events: none;
-  }
+  #toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 300; background: var(--surface2); border: 1px solid var(--border2); border-radius: 10px; padding: 0.75rem 1.2rem; font-size: 0.85rem; color: var(--text); box-shadow: 0 8px 30px rgba(0,0,0,.4); transform: translateY(20px); opacity: 0; transition: transform .25s,opacity .25s; pointer-events: none; }
   #toast.show { transform: translateY(0); opacity: 1; }
   #toast.success { border-color: #166534; color: var(--green); }
   #toast.error   { border-color: #7f1d1d; color: var(--red); }
@@ -266,7 +139,6 @@
 </head>
 <body>
 
-<!-- Top bar -->
 <div class="topbar">
   <span class="topbar-brand">Event Scraper</span>
   <nav class="topbar-nav">
@@ -278,22 +150,12 @@
 </div>
 
 <div class="layout">
-
-  <!-- Sidebar -->
   <aside class="sidebar">
     <span class="sidebar-label">Status</span>
-    <button class="sidebar-btn" data-status="" onclick="setFilter('status','',this)">
-      All <span class="sidebar-count" id="cnt-all">–</span>
-    </button>
-    <button class="sidebar-btn active" data-status="review" onclick="setFilter('status','review',this)">
-      Review <span class="sidebar-count" id="cnt-review">–</span>
-    </button>
-    <button class="sidebar-btn" data-status="published" onclick="setFilter('status','published',this)">
-      Published <span class="sidebar-count" id="cnt-published">–</span>
-    </button>
-    <button class="sidebar-btn" data-status="rejected" onclick="setFilter('status','rejected',this)">
-      Rejected <span class="sidebar-count" id="cnt-rejected">–</span>
-    </button>
+    <button class="sidebar-btn" data-status="" onclick="setFilter('status','',this)">All <span class="sidebar-count" id="cnt-all">–</span></button>
+    <button class="sidebar-btn active" data-status="review" onclick="setFilter('status','review',this)">Review <span class="sidebar-count" id="cnt-review">–</span></button>
+    <button class="sidebar-btn" data-status="published" onclick="setFilter('status','published',this)">Published <span class="sidebar-count" id="cnt-published">–</span></button>
+    <button class="sidebar-btn" data-status="rejected" onclick="setFilter('status','rejected',this)">Rejected <span class="sidebar-count" id="cnt-rejected">–</span></button>
 
     <span class="sidebar-label">Type</span>
     <button class="sidebar-btn active-type" data-type="" onclick="setFilter('type','',this)">All types</button>
@@ -311,26 +173,33 @@
     <button class="sidebar-btn" data-type="Other"      onclick="setFilter('type','Other',this)">Other</button>
   </aside>
 
-  <!-- Main -->
   <div class="main">
-
-    <!-- Toolbar -->
     <div class="toolbar">
       <div class="search-wrap">
-        <span class="search-icon">⌕</span>
-        <input id="searchInput" type="text" placeholder="Search title, organizer, location…"
-               oninput="debounceLoad()">
+        <span class="search-icon">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+        </span>
+        <input id="searchInput" type="text" placeholder="Search title, organizer, location…" oninput="debounceLoad()">
       </div>
 
       <div id="bulkBar">
         <span id="selectedCount"></span>
-        <button class="bulk-btn bulk-approve" onclick="bulkAction('published')">✓ Approve all</button>
-        <button class="bulk-btn bulk-reject"  onclick="bulkAction('rejected')">✕ Reject all</button>
-        <button class="bulk-btn bulk-clear"   onclick="clearSelection()">Clear</button>
+        <button class="bulk-btn bulk-approve" onclick="bulkAction('published')">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 8l4 4 6-7"/></svg>
+          Approve all
+        </button>
+        <button class="bulk-btn bulk-reject" onclick="bulkAction('rejected')">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+          Reject all
+        </button>
+        <button class="bulk-btn bulk-delete" onclick="bulkDeleteAction()">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h10M6 5V3h4v2M5 5l.5 8h5l.5-8"/></svg>
+          Delete all
+        </button>
+        <button class="bulk-btn bulk-clear" onclick="clearSelection()">Clear</button>
       </div>
     </div>
 
-    <!-- Event list -->
     <div class="event-list" id="eventList">
       <div class="empty-state">Loading…</div>
     </div>
@@ -384,8 +253,14 @@
     <div class="modal-err" id="modalErr"></div>
     <div class="modal-footer">
       <button class="modal-btn modal-cancel" onclick="closeModal()">Cancel</button>
-      <button class="modal-btn modal-save"   onclick="saveEdit()">Save changes</button>
-      <button class="modal-btn modal-approve" onclick="saveAndApprove()">Save &amp; Approve</button>
+      <button class="modal-btn modal-save" onclick="saveEdit()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8l4 4 6-7"/></svg>
+        Save changes
+      </button>
+      <button class="modal-btn modal-approve" onclick="saveAndApprove()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8l4 4 6-7"/></svg>
+        Save &amp; Approve
+      </button>
     </div>
   </div>
 </div>
@@ -393,17 +268,31 @@
 <div id="toast"></div>
 
 <script>
+  // ── SVG icon library ───────────────────────────────────────────────────
+  const IC = {
+    person:   `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>`,
+    calendar: `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 1v4M11 1v4M2 7h12"/></svg>`,
+    clock:    `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg>`,
+    pin:      `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5C5.5 1.5 3.5 3.5 3.5 6c0 3.5 4.5 8.5 4.5 8.5s4.5-5 4.5-8.5C12.5 3.5 10.5 1.5 8 1.5z"/><circle cx="8" cy="6" r="1.5"/></svg>`,
+    check:    `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 8l4 4 6-7"/></svg>`,
+    x:        `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>`,
+    pencil:   `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/><path d="M9.5 4.5l2 2"/></svg>`,
+    undo:     `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 4H2V2"/><path d="M2 4a6 6 0 1 1 .9 6"/></svg>`,
+    link:     `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 3H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9"/><path d="M10 2h4v4"/><path d="M13.5 2.5L8 8"/></svg>`,
+    trash:    `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h10M6 5V3h4v2M5 5l.5 8h5l.5-8"/></svg>`,
+    warning:  `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2L1.5 14h13L8 2z"/><path d="M8 7v3"/><circle cx="8" cy="12" r=".5" fill="currentColor"/></svg>`,
+  };
+
   // ── State ──────────────────────────────────────────────────────────────
   const state = { status: 'review', type: '', q: '' };
   let _debounce = null;
-  const _selected = new Set();   // selected event IDs
-  let _rows = [];                // current rendered rows
+  const _selected = new Set();
 
   // ── Boot ───────────────────────────────────────────────────────────────
   loadCounts();
   loadEvents();
 
-  // ── Sidebar filter ─────────────────────────────────────────────────────
+  // ── Filters ────────────────────────────────────────────────────────────
   function setFilter(key, value, btn) {
     if (key === 'status') {
       document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
@@ -418,26 +307,22 @@
     loadEvents();
   }
 
-  // ── Search (debounced) ─────────────────────────────────────────────────
   function debounceLoad() {
     clearTimeout(_debounce);
     _debounce = setTimeout(() => { state.q = document.getElementById('searchInput').value; loadEvents(); }, 280);
   }
 
-  // ── Load events ────────────────────────────────────────────────────────
+  // ── Data ───────────────────────────────────────────────────────────────
   async function loadEvents() {
     const p = new URLSearchParams();
-    if (state.status)  p.set('status',     state.status);
-    if (state.type)    p.set('event_type', state.type);
-    if (state.q)       p.set('q',          state.q);
-
+    if (state.status) p.set('status',     state.status);
+    if (state.type)   p.set('event_type', state.type);
+    if (state.q)      p.set('q',          state.q);
     try {
-      const resp = await fetch('/api/events?' + p);
-      _rows = await resp.json();
-      renderList(_rows);
+      const rows = await fetch('/api/events?' + p).then(r => r.json());
+      renderList(rows);
     } catch (e) {
-      document.getElementById('eventList').innerHTML =
-        `<div class="empty-state">Failed to load: ${esc(e.message)}</div>`;
+      document.getElementById('eventList').innerHTML = `<div class="empty-state">Failed to load: ${esc(e.message)}</div>`;
     }
   }
 
@@ -446,28 +331,20 @@
       const counts = await fetch('/api/events/counts').then(r => r.json());
       const total  = Object.values(counts).reduce((a,b) => a+b, 0);
       document.getElementById('cnt-all').textContent      = total;
-      document.getElementById('cnt-review').textContent    = counts.review    || 0;
-      document.getElementById('cnt-published').textContent = counts.published  || 0;
-      document.getElementById('cnt-rejected').textContent  = counts.rejected   || 0;
-
-      const badges = document.getElementById('countBadges');
-      badges.innerHTML = `
-        <span style="font-size:.78rem;color:var(--amber)">${counts.review||0} pending review</span>
-      `;
+      document.getElementById('cnt-review').textContent   = counts.review    || 0;
+      document.getElementById('cnt-published').textContent= counts.published  || 0;
+      document.getElementById('cnt-rejected').textContent = counts.rejected   || 0;
+      document.getElementById('countBadges').innerHTML =
+        `<span style="font-size:.78rem;color:var(--amber)">${counts.review||0} pending review</span>`;
     } catch {}
   }
 
-  // ── Render list ────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────
   function renderList(rows) {
     const list = document.getElementById('eventList');
-    if (!rows.length) {
-      list.innerHTML = '<div class="empty-state">No events match the current filter.</div>';
-      return;
-    }
+    if (!rows.length) { list.innerHTML = '<div class="empty-state">No events match the current filter.</div>'; return; }
     list.innerHTML = '';
-    for (const ev of rows) {
-      list.appendChild(buildRow(ev));
-    }
+    rows.forEach(ev => list.appendChild(buildRow(ev)));
     updateBulkBar();
   }
 
@@ -479,14 +356,12 @@
     const conf    = ev.confidence ?? 0;
     const confPct = Math.round(conf * 100);
     const confCls = conf >= 0.85 ? 'conf-high' : conf >= 0.55 ? 'conf-medium' : 'conf-low';
-
-    const isPublished = ev.status === 'published';
-    const isRejected  = ev.status === 'rejected';
+    const isPub   = ev.status === 'published';
+    const isRej   = ev.status === 'rejected';
 
     div.innerHTML = `
       <div class="row-check">
-        <input type="checkbox" ${_selected.has(ev.id) ? 'checked' : ''}
-               onchange="toggleSelect(${ev.id}, this.checked, event)">
+        <input type="checkbox" ${_selected.has(ev.id) ? 'checked' : ''} onchange="toggleSelect(${ev.id},this.checked,event)">
       </div>
       <div class="row-body">
         <div class="row-header">
@@ -495,10 +370,10 @@
           <span class="badge badge-type">${esc(ev.event_type || 'Other')}</span>
         </div>
         <div class="row-meta">
-          ${ev.organizer ? `<span>👤 @${esc(ev.organizer)}</span>` : ''}
-          ${ev.date      ? `<span>📅 ${esc(ev.date)}</span>`       : ''}
-          ${ev.time      ? `<span>🕐 ${esc(ev.time)}</span>`       : ''}
-          ${ev.location  ? `<span>📍 ${esc(ev.location)}</span>`   : ''}
+          ${ev.organizer ? `<span>${IC.person} @${esc(ev.organizer)}</span>` : ''}
+          ${ev.date      ? `<span>${IC.calendar} ${esc(ev.date)}</span>`     : ''}
+          ${ev.time      ? `<span>${IC.clock} ${esc(ev.time)}</span>`        : ''}
+          ${ev.location  ? `<span>${IC.pin} ${esc(ev.location)}</span>`      : ''}
         </div>
         ${ev.description ? `<div class="row-desc">${esc(ev.description)}</div>` : ''}
         <div class="conf-row">
@@ -506,33 +381,41 @@
           <span class="conf-label">${confPct}% confidence</span>
           ${ev.confidence_reason ? `<span class="conf-reason">— ${esc(ev.confidence_reason)}</span>` : ''}
         </div>
-        ${ev.source_url ? `<div style="margin-top:.4rem"><a class="ig-link" href="${esc(ev.source_url)}" target="_blank" rel="noopener">View post ↗</a></div>` : ''}
+        ${ev.source_url ? `<a class="ig-link" href="${esc(ev.source_url)}" target="_blank" rel="noopener">${IC.link} View post</a>` : ''}
       </div>
       <div class="row-actions">
-        <button class="action-btn btn-approve" onclick="setStatus(${ev.id},'published')"
-                ${isPublished ? 'disabled' : ''}>✓ Approve</button>
-        <button class="action-btn btn-reject"  onclick="setStatus(${ev.id},'rejected')"
-                ${isRejected  ? 'disabled' : ''}>✕ Reject</button>
-        ${!isRejected && !isPublished ? '' :
-          `<button class="action-btn btn-review" onclick="setStatus(${ev.id},'review')">↩ Review</button>`}
-        <button class="action-btn btn-edit" onclick="openModal(${ev.id})">✎ Edit</button>
+        <button class="action-btn btn-approve" onclick="setStatus(${ev.id},'published')" ${isPub ? 'disabled' : ''}>${IC.check} Approve</button>
+        <button class="action-btn btn-reject"  onclick="setStatus(${ev.id},'rejected')"  ${isRej ? 'disabled' : ''}>${IC.x} Reject</button>
+        ${isPub || isRej ? `<button class="action-btn btn-review" onclick="setStatus(${ev.id},'review')">${IC.undo} Review</button>` : ''}
+        <button class="action-btn btn-edit"   onclick="openModal(${ev.id})">${IC.pencil} Edit</button>
+        <button class="action-btn btn-delete" onclick="deleteEvent(${ev.id})">${IC.trash} Delete</button>
       </div>
     `;
     return div;
   }
 
-  // ── Single-event status change ─────────────────────────────────────────
+  // ── Status change ──────────────────────────────────────────────────────
   async function setStatus(id, status) {
     try {
       const resp = await fetch(`/api/events/${id}/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
       if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
       toast(`Event ${status === 'published' ? 'approved' : status}`, 'success');
-      loadCounts();
-      loadEvents();
+      loadCounts(); loadEvents();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  // ── Delete ─────────────────────────────────────────────────────────────
+  async function deleteEvent(id) {
+    if (!confirm('Permanently delete this event?')) return;
+    try {
+      const resp = await fetch(`/api/events/${id}`, { method: 'DELETE' });
+      if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
+      toast('Event deleted', 'success');
+      _selected.delete(id);
+      loadCounts(); loadEvents();
     } catch (e) { toast(e.message, 'error'); }
   }
 
@@ -540,8 +423,7 @@
   function toggleSelect(id, checked, e) {
     e.stopPropagation();
     if (checked) _selected.add(id); else _selected.delete(id);
-    const row = document.querySelector(`.event-row[data-id="${id}"]`);
-    if (row) row.classList.toggle('selected', checked);
+    document.querySelector(`.event-row[data-id="${id}"]`)?.classList.toggle('selected', checked);
     updateBulkBar();
   }
 
@@ -553,33 +435,40 @@
   }
 
   function updateBulkBar() {
-    const bar = document.getElementById('bulkBar');
-    const cnt = document.getElementById('selectedCount');
-    const n   = _selected.size;
-    if (n > 0) {
-      bar.classList.add('visible');
-      cnt.textContent = `${n} selected`;
-    } else {
-      bar.classList.remove('visible');
-    }
+    const n = _selected.size;
+    document.getElementById('bulkBar').classList.toggle('visible', n > 0);
+    document.getElementById('selectedCount').textContent = n > 0 ? `${n} selected` : '';
   }
 
-  // ── Bulk action ────────────────────────────────────────────────────────
+  // ── Bulk actions ───────────────────────────────────────────────────────
   async function bulkAction(status) {
     const ids = [..._selected];
     if (!ids.length) return;
     try {
       const resp = await fetch('/api/events/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids, status }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, action: 'status', status }),
       });
       if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
       const { updated } = await resp.json();
       toast(`${updated} event${updated !== 1 ? 's' : ''} ${status === 'published' ? 'approved' : 'rejected'}`, 'success');
-      clearSelection();
-      loadCounts();
-      loadEvents();
+      clearSelection(); loadCounts(); loadEvents();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function bulkDeleteAction() {
+    const ids = [..._selected];
+    if (!ids.length) return;
+    if (!confirm(`Permanently delete ${ids.length} event${ids.length !== 1 ? 's' : ''}?`)) return;
+    try {
+      const resp = await fetch('/api/events/bulk', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, action: 'delete' }),
+      });
+      if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
+      const { deleted } = await resp.json();
+      toast(`${deleted} event${deleted !== 1 ? 's' : ''} deleted`, 'success');
+      clearSelection(); loadCounts(); loadEvents();
     } catch (e) { toast(e.message, 'error'); }
   }
 
@@ -587,75 +476,54 @@
   async function openModal(id) {
     try {
       const ev = await fetch(`/api/events/${id}`).then(r => r.json());
-      document.getElementById('editId').value       = ev.id;
-      document.getElementById('editTitle').value    = ev.title || '';
-      document.getElementById('editDate').value     = ev.date  || '';
-      document.getElementById('editTime').value     = ev.time  || '';
-      document.getElementById('editLocation').value = ev.location || '';
-      document.getElementById('editOrganizer').value= ev.organizer || '';
-      document.getElementById('editDesc').value     = ev.description || '';
-      document.getElementById('editType').value     = ev.event_type || 'Other';
+      document.getElementById('editId').value        = ev.id;
+      document.getElementById('editTitle').value     = ev.title        || '';
+      document.getElementById('editDate').value      = ev.date         || '';
+      document.getElementById('editTime').value      = ev.time         || '';
+      document.getElementById('editLocation').value  = ev.location     || '';
+      document.getElementById('editOrganizer').value = ev.organizer    || '';
+      document.getElementById('editDesc').value      = ev.description  || '';
+      document.getElementById('editType').value      = ev.event_type   || 'Other';
       document.getElementById('modalErr').style.display = 'none';
       document.getElementById('modalBackdrop').classList.add('open');
       document.getElementById('editTitle').focus();
     } catch (e) { toast('Failed to load event: ' + e.message, 'error'); }
   }
 
-  function closeModal() {
-    document.getElementById('modalBackdrop').classList.remove('open');
-  }
-
-  function closeModalOnBackdrop(e) {
-    if (e.target === document.getElementById('modalBackdrop')) closeModal();
-  }
-
+  function closeModal() { document.getElementById('modalBackdrop').classList.remove('open'); }
+  function closeModalOnBackdrop(e) { if (e.target === document.getElementById('modalBackdrop')) closeModal(); }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-  function collectModalFields() {
-    return {
+  async function saveEdit(thenApprove = false) {
+    const id = document.getElementById('editId').value;
+    const fields = {
       title:       document.getElementById('editTitle').value.trim(),
       date:        document.getElementById('editDate').value     || null,
       time:        document.getElementById('editTime').value     || null,
-      location:    document.getElementById('editLocation').value.trim() || null,
+      location:    document.getElementById('editLocation').value.trim()  || null,
       organizer:   document.getElementById('editOrganizer').value.trim() || null,
-      description: document.getElementById('editDesc').value.trim() || null,
+      description: document.getElementById('editDesc').value.trim()      || null,
       event_type:  document.getElementById('editType').value,
     };
-  }
-
-  async function saveEdit(thenApprove = false) {
-    const id     = document.getElementById('editId').value;
-    const fields = collectModalFields();
-    const errEl  = document.getElementById('modalErr');
-
+    const errEl = document.getElementById('modalErr');
     if (!fields.title) { errEl.textContent = 'Title is required.'; errEl.style.display = 'block'; return; }
-
     try {
       const resp = await fetch(`/api/events/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fields),
       });
       if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
-
       if (thenApprove) {
         await fetch(`/api/events/${id}/status`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'published' }),
         });
         toast('Saved and approved', 'success');
       } else {
         toast('Changes saved', 'success');
       }
-
-      closeModal();
-      loadCounts();
-      loadEvents();
-    } catch (e) {
-      errEl.textContent = e.message;
-      errEl.style.display = 'block';
-    }
+      closeModal(); loadCounts(); loadEvents();
+    } catch (e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
   }
 
   function saveAndApprove() { saveEdit(true); }
@@ -664,17 +532,13 @@
   let _toastTimer = null;
   function toast(msg, type = '') {
     const el = document.getElementById('toast');
-    el.textContent = msg;
-    el.className   = `show ${type}`;
+    el.textContent = msg; el.className = `show ${type}`;
     clearTimeout(_toastTimer);
     _toastTimer = setTimeout(() => { el.className = ''; }, 2800);
   }
 
-  // ── Util ───────────────────────────────────────────────────────────────
   function esc(s) {
-    return String(s ?? '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 </script>
 </body>
