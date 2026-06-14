@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Instagram Event Scraper</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0d0d0d;
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+  .container { max-width: 860px; margin: 0 auto; }
+
+  h1 {
+    font-size: 1.65rem;
+    font-weight: 700;
+    background: linear-gradient(90deg, #e1306c, #fd5949, #d6249f);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle { color: #777; font-size: 0.88rem; margin: 0.3rem 0 2rem; }
+
+  .card {
+    background: #181818;
+    border: 1px solid #272727;
+    border-radius: 12px;
+    padding: 1.4rem;
+    margin-bottom: 1.1rem;
+  }
+  .card-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #666;
+    margin-bottom: 1rem;
+  }
+
+  .row { display: flex; gap: 1rem; }
+  .field { flex: 1; display: flex; flex-direction: column; gap: 0.35rem; }
+  label { font-size: 0.8rem; color: #999; }
+  input[type="date"],
+  input[type="password"],
+  input[type="text"],
+  select,
+  textarea {
+    background: #0f0f0f;
+    border: 1px solid #303030;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 0.93rem;
+    padding: 0.55rem 0.8rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+    font-family: inherit;
+  }
+  select option { background: #181818; }
+  input:focus, textarea:focus, select:focus { border-color: #e1306c; }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+  textarea { resize: vertical; min-height: 110px; line-height: 1.55; }
+  .hint { font-size: 0.76rem; color: #555; margin-top: 0.2rem; }
+
+  .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.9rem; }
+  @media (max-width: 600px) { .row, .row-3 { flex-direction: column; grid-template-columns: 1fr; } }
+
+  /* toggle */
+  .toggle-row { display: flex; align-items: center; gap: 0.6rem; }
+  .toggle { position: relative; display: inline-block; width: 38px; height: 22px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0;
+    background: #303030; border-radius: 22px; cursor: pointer;
+    transition: background 0.2s;
+  }
+  .slider::before {
+    content: ''; position: absolute;
+    width: 16px; height: 16px;
+    left: 3px; bottom: 3px;
+    background: #fff; border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  input:checked + .slider { background: #e1306c; }
+  input:checked + .slider::before { transform: translateX(16px); }
+  .toggle-label { font-size: 0.85rem; color: #aaa; }
+
+  button#scrapeBtn {
+    width: 100%; padding: 0.85rem;
+    border: none; border-radius: 10px;
+    background: linear-gradient(135deg, #e1306c, #d6249f);
+    color: #fff; font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  }
+  button#scrapeBtn:hover { opacity: 0.88; }
+  button#scrapeBtn:active { transform: scale(0.99); }
+  button#scrapeBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  #statusBar {
+    text-align: center; font-size: 0.86rem; color: #666;
+    min-height: 1.3rem; margin: 0.7rem 0;
+  }
+  #statusBar.err { color: #f08080; }
+
+  /* summary chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.2rem; }
+  .chip {
+    font-size: 0.78rem; font-weight: 600;
+    padding: 0.28rem 0.75rem;
+    border-radius: 999px; border: 1px solid;
+  }
+  .chip-published { color: #4ade80; border-color: #166534; background: #052e16; }
+  .chip-review    { color: #fbbf24; border-color: #78350f; background: #1c0a00; }
+  .chip-rejected  { color: #f87171; border-color: #7f1d1d; background: #1f0a0a; }
+  .chip-duplicate { color: #94a3b8; border-color: #334155; background: #0f172a; }
+  .chip-posts     { color: #818cf8; border-color: #3730a3; background: #0f0f2a; }
+
+  /* event cards */
+  #results { display: none; }
+  #results h2 { font-size: 1rem; font-weight: 600; color: #ccc; margin-bottom: 0.9rem; }
+
+  .event-card {
+    background: #111;
+    border: 1px solid #252525;
+    border-left: 3px solid transparent;
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    margin-bottom: 0.8rem;
+    transition: border-color 0.15s;
+  }
+  .event-card.published { border-left-color: #22c55e; }
+  .event-card.review    { border-left-color: #f59e0b; }
+  .event-card.rejected  { border-left-color: #ef4444; opacity: 0.65; }
+
+  .event-header { display: flex; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.45rem; flex-wrap: wrap; }
+  .event-title { font-size: 0.97rem; font-weight: 600; color: #f0f0f0; flex: 1; }
+
+  .badge {
+    font-size: 0.7rem; font-weight: 600; padding: 0.18rem 0.55rem;
+    border-radius: 999px; white-space: nowrap;
+  }
+  .badge-type     { background: #1e293b; color: #94a3b8; }
+  .badge-status-published { background: #052e16; color: #4ade80; }
+  .badge-status-review    { background: #1c1400; color: #fbbf24; }
+  .badge-status-rejected  { background: #1f0a0a; color: #f87171; }
+
+  .event-meta { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+  .event-meta span { display: flex; align-items: center; gap: 0.25rem; }
+
+  .event-desc { font-size: 0.86rem; color: #b0b0b0; line-height: 1.55; margin-bottom: 0.5rem; }
+
+  .confidence-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; }
+  .confidence-bar-wrap { flex: 1; height: 4px; background: #252525; border-radius: 2px; overflow: hidden; }
+  .confidence-bar { height: 100%; border-radius: 2px; transition: width 0.4s; }
+  .conf-high   { background: #22c55e; }
+  .conf-medium { background: #f59e0b; }
+  .conf-low    { background: #ef4444; }
+  .confidence-label { font-size: 0.75rem; color: #666; white-space: nowrap; }
+
+  .reason-text { font-size: 0.75rem; color: #555; margin-top: 0.25rem; font-style: italic; }
+  .event-link { font-size: 0.8rem; margin-top: 0.5rem; }
+  .event-link a { color: #e1306c; text-decoration: none; }
+  .event-link a:hover { text-decoration: underline; }
+
+  .validation-errors { font-size: 0.75rem; color: #f87171; margin-top: 0.35rem; }
+
+  .error-box {
+    background: #1a0808; border: 1px solid #4a1515;
+    border-radius: 8px; padding: 0.7rem 0.9rem;
+    font-size: 0.82rem; color: #f08080; margin-bottom: 0.5rem;
+  }
+
+  .spinner {
+    display: inline-block; width: 15px; height: 15px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* filter bar */
+  .filter-bar { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .filter-btn {
+    font-size: 0.78rem; padding: 0.3rem 0.75rem;
+    border-radius: 999px; border: 1px solid #303030;
+    background: transparent; color: #888; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover, .filter-btn.active { border-color: #e1306c; color: #e1306c; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Instagram Event Scraper</h1>
+  <p class="subtitle">Scrape Instagram channels, extract events with AI, score confidence.</p>
+
+  <!-- Date range -->
+  <div class="card">
+    <div class="card-title">Date Range</div>
+    <div class="row">
+      <div class="field">
+        <label for="startDate">Start date</label>
+        <input type="date" id="startDate">
+      </div>
+      <div class="field">
+        <label for="endDate">End date</label>
+        <input type="date" id="endDate">
+      </div>
+    </div>
+  </div>
+
+  <!-- Channels -->
+  <div class="card">
+    <div class="card-title">Instagram Channels</div>
+    <div class="field">
+      <label for="channels">One channel per line — full URL or username</label>
+      <textarea id="channels" placeholder="https://www.instagram.com/ubcevents/
+@ubcssc
+ubcams"></textarea>
+    </div>
+    <p class="hint">Accepts https://www.instagram.com/channel_name/, @username, or bare usernames.</p>
+  </div>
+
+  <!-- Settings -->
+  <div class="card">
+    <div class="card-title">Settings</div>
+    <div class="row-3">
+      <div class="field">
+        <label for="apiKey">OpenAI API key</label>
+        <input type="password" id="apiKey" placeholder="sk-…">
+        <span class="hint">Stays in your browser, never stored server-side.</span>
+      </div>
+      <div class="field">
+        <label for="model">Model</label>
+        <select id="model">
+          <option value="gpt-4o" selected>gpt-4o</option>
+          <option value="gpt-4o-mini">gpt-4o-mini (faster)</option>
+          <option value="o3">o3 (reasoning)</option>
+          <option value="o4-mini">o4-mini (reasoning)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="batchSize">Batch size</label>
+        <input type="text" id="batchSize" value="8">
+        <span class="hint">Posts per API call.</span>
+      </div>
+    </div>
+    <div style="margin-top:1rem;">
+      <div class="toggle-row">
+        <label class="toggle">
+          <input type="checkbox" id="ocrToggle" checked>
+          <span class="slider"></span>
+        </label>
+        <span class="toggle-label">OCR — extract text from post images (requires tesseract)</span>
+      </div>
+    </div>
+  </div>
+
+  <button id="scrapeBtn" onclick="runScrape()">
+    <span id="btnText">Scrape &amp; Extract Events</span>
+  </button>
+  <div id="statusBar"></div>
+
+  <!-- Results -->
+  <div id="results">
+    <div class="chips" id="chips"></div>
+
+    <div class="filter-bar">
+      <button class="filter-btn active" onclick="filterCards('all', this)">All</button>
+      <button class="filter-btn" onclick="filterCards('published', this)">Published</button>
+      <button class="filter-btn" onclick="filterCards('review', this)">Review</button>
+      <button class="filter-btn" onclick="filterCards('rejected', this)">Rejected</button>
+    </div>
+
+    <div id="eventList"></div>
+    <div id="errorList"></div>
+  </div>
+</div>
+
+<script>
+  // Pre-fill today → +30 days
+  const today = new Date();
+  const later = new Date(today); later.setDate(today.getDate() + 30);
+  document.getElementById('startDate').value = today.toISOString().slice(0,10);
+  document.getElementById('endDate').value   = later.toISOString().slice(0,10);
+
+  let _allCards = [];
+
+  async function runScrape() {
+    const btn    = document.getElementById('scrapeBtn');
+    const btnTxt = document.getElementById('btnText');
+
+    const startDate  = document.getElementById('startDate').value;
+    const endDate    = document.getElementById('endDate').value;
+    const channels   = document.getElementById('channels').value.trim();
+    const apiKey     = document.getElementById('apiKey').value.trim();
+    const model      = document.getElementById('model').value;
+    const batchSize  = document.getElementById('batchSize').value;
+    const ocrEnabled = document.getElementById('ocrToggle').checked;
+
+    if (!startDate || !endDate) { setStatus('Please set both dates.', true); return; }
+    if (!channels)              { setStatus('Please enter at least one channel.', true); return; }
+
+    btn.disabled = true;
+    btnTxt.innerHTML = '<span class="spinner"></span> Scraping…';
+    setStatus('Fetching posts from Instagram…');
+    document.getElementById('results').style.display = 'none';
+
+    try {
+      const resp = await fetch('/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start_date: startDate, end_date: endDate,
+          channels, api_key: apiKey,
+          model, batch_size: parseInt(batchSize) || 8,
+          ocr_enabled: ocrEnabled,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) { setStatus(data.error || 'Server error.', true); return; }
+      renderResults(data);
+    } catch (e) {
+      setStatus('Request failed: ' + e.message, true);
+    } finally {
+      btn.disabled = false;
+      btnTxt.textContent = 'Scrape & Extract Events';
+    }
+  }
+
+  function setStatus(msg, isErr = false) {
+    const el = document.getElementById('statusBar');
+    el.textContent = msg;
+    el.className = isErr ? 'err' : '';
+  }
+
+  function renderResults(data) {
+    const events  = data.events  || [];
+    const errors  = data.errors  || [];
+    const counts  = data.storage_counts || {};
+
+    // Chips
+    const chips = document.getElementById('chips');
+    chips.innerHTML = `
+      <span class="chip chip-posts">${data.posts_scraped} posts scraped</span>
+      ${counts.published  ? `<span class="chip chip-published">${counts.published} published</span>`  : ''}
+      ${counts.review     ? `<span class="chip chip-review">${counts.review} for review</span>`       : ''}
+      ${counts.rejected   ? `<span class="chip chip-rejected">${counts.rejected} rejected</span>`     : ''}
+      ${counts.duplicate  ? `<span class="chip chip-duplicate">${counts.duplicate} duplicates</span>` : ''}
+      ${data.posts_with_ocr ? `<span class="chip chip-posts">${data.posts_with_ocr} OCR'd</span>`    : ''}
+    `;
+
+    // Events
+    const list = document.getElementById('eventList');
+    list.innerHTML = '';
+    _allCards = [];
+    if (!events.length) {
+      list.innerHTML = '<p style="color:#555;font-size:.88rem;margin-bottom:1rem">No events extracted in this date range.</p>';
+    }
+    for (const ev of events) {
+      const card = buildCard(ev);
+      _allCards.push({ el: card, status: ev.status });
+      list.appendChild(card);
+    }
+
+    // Errors
+    const errList = document.getElementById('errorList');
+    errList.innerHTML = '';
+    for (const e of errors) {
+      const b = document.createElement('div');
+      b.className = 'error-box';
+      b.textContent = typeof e === 'string' ? e
+        : (e.username ? `@${e.username}: ${e.error}` : JSON.stringify(e));
+      errList.appendChild(b);
+    }
+
+    setStatus(`Done — ${data.batches} batch${data.batches !== 1 ? 'es' : ''} processed.`);
+    document.getElementById('results').style.display = 'block';
+
+    // Reset filter
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.filter-btn').classList.add('active');
+  }
+
+  function buildCard(ev) {
+    const card = document.createElement('div');
+    card.className = `event-card ${ev.status}`;
+
+    const conf = ev.confidence ?? 0;
+    const confClass = conf >= 0.85 ? 'conf-high' : conf >= 0.55 ? 'conf-medium' : 'conf-low';
+    const confPct   = Math.round(conf * 100);
+
+    const statusBadgeClass = `badge-status-${ev.status}`;
+    const valErrors = (ev.validation_errors || []).join(' · ');
+
+    card.innerHTML = `
+      <div class="event-header">
+        <div class="event-title">${esc(ev.title || '(Untitled)')}</div>
+        <span class="badge badge-type">${esc(ev.event_type || 'Other')}</span>
+        <span class="badge ${statusBadgeClass}">${ev.status}</span>
+      </div>
+      <div class="event-meta">
+        ${ev.organizer ? `<span>👤 @${esc(ev.organizer)}</span>` : ''}
+        ${ev.date      ? `<span>📅 ${esc(ev.date)}</span>`       : ''}
+        ${ev.time      ? `<span>🕐 ${esc(ev.time)}</span>`       : ''}
+        ${ev.location  ? `<span>📍 ${esc(ev.location)}</span>`   : ''}
+      </div>
+      ${ev.description ? `<div class="event-desc">${esc(ev.description)}</div>` : ''}
+      <div class="confidence-row">
+        <div class="confidence-bar-wrap">
+          <div class="confidence-bar ${confClass}" style="width:${confPct}%"></div>
+        </div>
+        <span class="confidence-label">${confPct}% confidence</span>
+      </div>
+      ${ev.confidence_reason ? `<div class="reason-text">${esc(ev.confidence_reason)}</div>` : ''}
+      ${ev.source_url ? `<div class="event-link"><a href="${esc(ev.source_url)}" target="_blank" rel="noopener">View Instagram post ↗</a></div>` : ''}
+      ${valErrors ? `<div class="validation-errors">⚠ ${esc(valErrors)}</div>` : ''}
+    `;
+    return card;
+  }
+
+  function filterCards(status, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _allCards.forEach(({ el, status: s }) => {
+      el.style.display = (status === 'all' || s === status) ? '' : 'none';
+    });
+  }
+
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
