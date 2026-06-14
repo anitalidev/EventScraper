@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Instagram Event Scraper</title>
+<title>Event Hub</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -217,10 +217,11 @@
 </head>
 <body>
 <div class="topbar">
-  <span class="topbar-brand">Event Scraper</span>
+  <span class="topbar-brand">Event Hub</span>
   <nav>
-    <a href="/" class="active">Scraper</a>
+    <a href="/" class="active">Instagram Scraper</a>
     <a href="/review">Review Queue</a>
+    <a href="/hub">The Hub <span style="font-size:0.68rem;font-weight:700;padding:0.15rem 0.45rem;border-radius:999px;background:#1a0a1a;color:#c084fc;border:1px solid #5b21b6;">alpha</span></a>
   </nav>
 </div>
 <div class="container">
@@ -266,8 +267,8 @@ ubcams"></textarea>
       <div class="field">
         <label for="model">Model</label>
         <select id="model">
-          <option value="gpt-4o" selected>gpt-4o</option>
-          <option value="gpt-4o-mini">gpt-4o-mini (faster)</option>
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-4o-mini" selected>gpt-4o-mini (faster)</option>
           <option value="o3">o3 (reasoning)</option>
           <option value="o4-mini">o4-mini (reasoning)</option>
         </select>
@@ -320,11 +321,12 @@ ubcams"></textarea>
     warning:  `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2L1.5 14h13L8 2z"/><path d="M8 7v3"/><circle cx="8" cy="12" r=".5" fill="currentColor"/></svg>`,
   };
 
-  // Pre-fill today → +30 days
+  // Pre-fill 30 days ago → today (local timezone)
+  const localDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const today = new Date();
-  const later = new Date(today); later.setDate(today.getDate() + 30);
-  document.getElementById('startDate').value = today.toISOString().slice(0,10);
-  document.getElementById('endDate').value   = later.toISOString().slice(0,10);
+  const earlier = new Date(today); earlier.setDate(today.getDate() - 30);
+  document.getElementById('startDate').value = localDate(earlier);
+  document.getElementById('endDate').value   = localDate(today);
 
   let _allCards = [];
 
@@ -442,7 +444,7 @@ ubcams"></textarea>
         <span class="badge ${statusBadgeClass}">${ev.status}</span>
       </div>
       <div class="event-meta">
-        ${ev.organizer ? `<span>${IC.person} @${esc(ev.organizer)}</span>` : ''}
+        ${ev.organizer ? `<span>${IC.person} @${esc(ev.organizer.replace(/^@/, ''))}</span>` : ''}
         ${ev.date      ? `<span>${IC.calendar} ${esc(ev.date)}</span>`     : ''}
         ${ev.time      ? `<span>${IC.clock} ${esc(ev.time)}</span>`        : ''}
         ${ev.location  ? `<span>${IC.pin} ${esc(ev.location)}</span>`      : ''}

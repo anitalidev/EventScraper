@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Review Queue — Instagram Event Scraper</title>
+<title>Review Queue — Event Hub</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -17,6 +17,8 @@
     --muted2:   #999;
     --green:    #22c55e;
     --green-bg: #052e16;
+    --blue:     #60a5fa;
+    --blue-bg:  #0c1a2e;
     --amber:    #f59e0b;
     --amber-bg: #1c1000;
     --red:      #ef4444;
@@ -46,6 +48,16 @@
   .sidebar-btn.active { background: var(--surface2); color: var(--text); font-weight: 600; }
   .sidebar-count { font-size: 0.72rem; padding: 0.1rem 0.45rem; border-radius: 999px; background: var(--surface2); color: var(--muted2); }
   .sidebar-btn.active .sidebar-count { background: var(--border2); }
+  .sidebar-del-rejected {
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 0.35rem; padding: 0.38rem 0.6rem;
+    border-radius: 7px; border: 1px solid #5a1a1a;
+    background: #1a0a0a; color: #f87171;
+    font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    width: 100%; transition: opacity .15s;
+  }
+  .sidebar-del-rejected:hover { opacity: 0.8; }
+  .sidebar-del-rejected:disabled { opacity: 0.35; cursor: not-allowed; }
 
   /* main */
   .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -73,6 +85,7 @@
   /* event row */
   .event-row { display: flex; align-items: flex-start; gap: 0.8rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid transparent; border-radius: 10px; margin-bottom: 0.65rem; transition: border-color .15s; }
   .event-row.published { border-left-color: var(--green); }
+  .event-row.approved  { border-left-color: var(--blue); }
   .event-row.review    { border-left-color: var(--amber); }
   .event-row.rejected  { border-left-color: var(--red); opacity: 0.6; }
   .event-row.selected  { background: #1a1020; border-color: #5a1a5a; }
@@ -83,6 +96,7 @@
   .row-title { font-size: 0.93rem; font-weight: 600; flex: 1; min-width: 0; }
   .badge { font-size: 0.68rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
   .badge-published { background: var(--green-bg); color: var(--green); }
+  .badge-approved  { background: var(--blue-bg);  color: var(--blue); }
   .badge-review    { background: var(--amber-bg); color: var(--amber); }
   .badge-rejected  { background: var(--red-bg);   color: var(--red); }
   .badge-type      { background: var(--surface2);  color: var(--muted2); }
@@ -101,13 +115,16 @@
   .action-btn { font-size: 0.75rem; font-weight: 600; padding: 0.3rem 0.7rem; border-radius: 6px; border: 1px solid; cursor: pointer; white-space: nowrap; transition: opacity .15s; background: transparent; display: flex; align-items: center; gap: 0.3rem; }
   .action-btn:hover { opacity: 0.75; }
   .action-btn:disabled { opacity: 0.3; cursor: default; }
-  .btn-approve { color: var(--green); border-color: #166534; }
-  .btn-reject  { color: var(--red);   border-color: #7f1d1d; }
-  .btn-review  { color: var(--amber); border-color: #78350f; }
+  .btn-approve  { color: var(--green); border-color: #166534; }
+  .btn-publish  { color: var(--blue);  border-color: #1e3a5f; }
+  .btn-reject   { color: var(--red);   border-color: #7f1d1d; }
+  .btn-review   { color: var(--amber); border-color: #78350f; }
   .btn-edit    { color: var(--muted2); border-color: var(--border2); }
   .btn-delete  { color: #f87171; border-color: #5a1a1a; }
   .ig-link { font-size: 0.75rem; color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.4rem; }
   .ig-link:hover { text-decoration: underline; }
+  .vibe-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+  .vibe-tag { font-size: 0.68rem; padding: 0.12rem 0.45rem; border-radius: 999px; background: #1a1a2e; color: #818cf8; border: 1px solid #3730a3; }
 
   /* modal */
   .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 200; align-items: center; justify-content: center; }
@@ -129,6 +146,9 @@
   .modal-approve { background: var(--green-bg); color: var(--green); border: 1px solid #166534; }
   .modal-cancel  { background: var(--surface2); color: var(--muted2); }
   .modal-err { font-size: 0.8rem; color: var(--red); margin-top: 0.5rem; display: none; }
+  .vibe-picker { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .vibe-chip { font-size: 0.75rem; font-weight: 600; padding: 0.22rem 0.6rem; border-radius: 999px; border: 1px solid #3730a3; background: transparent; color: var(--muted2); cursor: pointer; transition: background .12s, color .12s; }
+  .vibe-chip.on { background: #1a1a2e; color: #818cf8; }
 
   /* toast */
   #toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 300; background: var(--surface2); border: 1px solid var(--border2); border-radius: 10px; padding: 0.75rem 1.2rem; font-size: 0.85rem; color: var(--text); box-shadow: 0 8px 30px rgba(0,0,0,.4); transform: translateY(20px); opacity: 0; transition: transform .25s,opacity .25s; pointer-events: none; }
@@ -140,10 +160,11 @@
 <body>
 
 <div class="topbar">
-  <span class="topbar-brand">Event Scraper</span>
+  <span class="topbar-brand">Event Hub</span>
   <nav class="topbar-nav">
-    <a href="/">Scraper</a>
+    <a href="/">Instagram Scraper</a>
     <a href="/review" class="active">Review Queue</a>
+    <a href="/hub">The Hub <span style="font-size:0.68rem;font-weight:700;padding:0.15rem 0.45rem;border-radius:999px;background:#1a0a1a;color:#c084fc;border:1px solid #5b21b6;">alpha</span></a>
   </nav>
   <div class="topbar-spacer"></div>
   <div id="countBadges"></div>
@@ -154,8 +175,10 @@
     <span class="sidebar-label">Status</span>
     <button class="sidebar-btn" data-status="" onclick="setFilter('status','',this)">All <span class="sidebar-count" id="cnt-all">–</span></button>
     <button class="sidebar-btn active" data-status="review" onclick="setFilter('status','review',this)">Review <span class="sidebar-count" id="cnt-review">–</span></button>
+    <button class="sidebar-btn" data-status="approved" onclick="setFilter('status','approved',this)">Approved <span class="sidebar-count" id="cnt-approved">–</span></button>
     <button class="sidebar-btn" data-status="published" onclick="setFilter('status','published',this)">Published <span class="sidebar-count" id="cnt-published">–</span></button>
     <button class="sidebar-btn" data-status="rejected" onclick="setFilter('status','rejected',this)">Rejected <span class="sidebar-count" id="cnt-rejected">–</span></button>
+    <button class="sidebar-del-rejected" id="delRejectedBtn" onclick="deleteAllRejected()" title="Permanently delete all rejected events">Delete all rejected</button>
 
     <span class="sidebar-label">Type</span>
     <button class="sidebar-btn active-type" data-type="" onclick="setFilter('type','',this)">All types</button>
@@ -184,7 +207,7 @@
 
       <div id="bulkBar">
         <span id="selectedCount"></span>
-        <button class="bulk-btn bulk-approve" onclick="bulkAction('published')">
+        <button class="bulk-btn bulk-approve" onclick="bulkAction('approved')">
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 8l4 4 6-7"/></svg>
           Approve all
         </button>
@@ -248,6 +271,10 @@
       <div class="modal-field">
         <label>Description</label>
         <textarea id="editDesc"></textarea>
+      </div>
+      <div class="modal-field">
+        <label>Vibes</label>
+        <div class="vibe-picker" id="editVibes"></div>
       </div>
     </div>
     <div class="modal-err" id="modalErr"></div>
@@ -315,9 +342,9 @@
   // ── Data ───────────────────────────────────────────────────────────────
   async function loadEvents() {
     const p = new URLSearchParams();
-    if (state.status) p.set('status',     state.status);
-    if (state.type)   p.set('event_type', state.type);
-    if (state.q)      p.set('q',          state.q);
+    if (state.status) p.set('status', state.status);
+    if (state.type)   p.set('vibe',   state.type);
+    if (state.q)      p.set('q',      state.q);
     try {
       const rows = await fetch('/api/events?' + p).then(r => r.json());
       renderList(rows);
@@ -330,12 +357,14 @@
     try {
       const counts = await fetch('/api/events/counts').then(r => r.json());
       const total  = Object.values(counts).reduce((a,b) => a+b, 0);
-      document.getElementById('cnt-all').textContent      = total;
-      document.getElementById('cnt-review').textContent   = counts.review    || 0;
-      document.getElementById('cnt-published').textContent= counts.published  || 0;
-      document.getElementById('cnt-rejected').textContent = counts.rejected   || 0;
+      document.getElementById('cnt-all').textContent       = total;
+      document.getElementById('cnt-review').textContent    = counts.review    || 0;
+      document.getElementById('cnt-approved').textContent  = counts.approved  || 0;
+      document.getElementById('cnt-published').textContent = counts.published  || 0;
+      document.getElementById('cnt-rejected').textContent  = counts.rejected   || 0;
       document.getElementById('countBadges').innerHTML =
-        `<span style="font-size:.78rem;color:var(--amber)">${counts.review||0} pending review</span>`;
+        `<span style="font-size:.78rem;color:var(--amber)">${counts.review||0} pending review</span>` +
+        (counts.approved ? `<span style="font-size:.78rem;color:var(--blue);margin-left:.75rem">${counts.approved} approved</span>` : '');
     } catch {}
   }
 
@@ -356,8 +385,9 @@
     const conf    = ev.confidence ?? 0;
     const confPct = Math.round(conf * 100);
     const confCls = conf >= 0.85 ? 'conf-high' : conf >= 0.55 ? 'conf-medium' : 'conf-low';
-    const isPub   = ev.status === 'published';
-    const isRej   = ev.status === 'rejected';
+    const isPub  = ev.status === 'published';
+    const isApp  = ev.status === 'approved';
+    const isRej  = ev.status === 'rejected';
 
     div.innerHTML = `
       <div class="row-check">
@@ -370,7 +400,7 @@
           <span class="badge badge-type">${esc(ev.event_type || 'Other')}</span>
         </div>
         <div class="row-meta">
-          ${ev.organizer ? `<span>${IC.person} @${esc(ev.organizer)}</span>` : ''}
+          ${ev.organizer ? `<span>${IC.person} @${esc(ev.organizer.replace(/^@/, ''))}</span>` : ''}
           ${ev.date      ? `<span>${IC.calendar} ${esc(ev.date)}</span>`     : ''}
           ${ev.time      ? `<span>${IC.clock} ${esc(ev.time)}</span>`        : ''}
           ${ev.location  ? `<span>${IC.pin} ${esc(ev.location)}</span>`      : ''}
@@ -381,12 +411,14 @@
           <span class="conf-label">${confPct}% confidence</span>
           ${ev.confidence_reason ? `<span class="conf-reason">— ${esc(ev.confidence_reason)}</span>` : ''}
         </div>
+        ${vibeHtml(ev.vibes)}
         ${ev.source_url ? `<a class="ig-link" href="${esc(ev.source_url)}" target="_blank" rel="noopener">${IC.link} View post</a>` : ''}
       </div>
       <div class="row-actions">
-        <button class="action-btn btn-approve" onclick="setStatus(${ev.id},'published')" ${isPub ? 'disabled' : ''}>${IC.check} Approve</button>
+        <button class="action-btn btn-approve" onclick="setStatus(${ev.id},'approved')" ${isApp||isPub ? 'disabled' : ''}>${IC.check} Approve</button>
+        ${isApp ? `<button class="action-btn btn-publish" onclick="setStatus(${ev.id},'published')">${IC.link} Publish to UBC</button>` : ''}
         <button class="action-btn btn-reject"  onclick="setStatus(${ev.id},'rejected')"  ${isRej ? 'disabled' : ''}>${IC.x} Reject</button>
-        ${isPub || isRej ? `<button class="action-btn btn-review" onclick="setStatus(${ev.id},'review')">${IC.undo} Review</button>` : ''}
+        ${isApp||isRej ? `<button class="action-btn btn-review" onclick="setStatus(${ev.id},'review')">${IC.undo} Review</button>` : ''}
         <button class="action-btn btn-edit"   onclick="openModal(${ev.id})">${IC.pencil} Edit</button>
         <button class="action-btn btn-delete" onclick="deleteEvent(${ev.id})">${IC.trash} Delete</button>
       </div>
@@ -402,7 +434,8 @@
         body: JSON.stringify({ status }),
       });
       if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
-      toast(`Event ${status === 'published' ? 'approved' : status}`, 'success');
+      const label = { published: 'published to UBC Discovery', approved: 'approved', rejected: 'rejected', review: 'moved to review' };
+      toast(`Event ${label[status] || status}`, 'success');
       loadCounts(); loadEvents();
     } catch (e) { toast(e.message, 'error'); }
   }
@@ -451,9 +484,36 @@
       });
       if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
       const { updated } = await resp.json();
-      toast(`${updated} event${updated !== 1 ? 's' : ''} ${status === 'published' ? 'approved' : 'rejected'}`, 'success');
+      const bulkLabel = { approved: 'approved', rejected: 'rejected', published: 'published to UBC Discovery', review: 'moved to review' };
+      toast(`${updated} event${updated !== 1 ? 's' : ''} ${bulkLabel[status] || status}`, 'success');
       clearSelection(); loadCounts(); loadEvents();
     } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function deleteAllRejected() {
+    const btn = document.getElementById('delRejectedBtn');
+    const count = parseInt(document.getElementById('cnt-rejected').textContent) || 0;
+    if (!count) { toast('No rejected events to delete', ''); return; }
+    if (!confirm(`Permanently delete all ${count} rejected event${count !== 1 ? 's' : ''}?`)) return;
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/api/events?status=rejected');
+      const rows = await resp.json();
+      const ids = rows.map(r => r.id);
+      if (!ids.length) { toast('No rejected events found', ''); return; }
+      const del = await fetch('/api/events/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, action: 'delete' }),
+      });
+      const { deleted } = await del.json();
+      toast(`${deleted} rejected event${deleted !== 1 ? 's' : ''} deleted`, 'success');
+      loadEvents(); loadCounts();
+    } catch(e) {
+      toast('Delete failed: ' + e.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   async function bulkDeleteAction() {
@@ -484,6 +544,7 @@
       document.getElementById('editOrganizer').value = ev.organizer    || '';
       document.getElementById('editDesc').value      = ev.description  || '';
       document.getElementById('editType').value      = ev.event_type   || 'Other';
+      renderVibePicker('editVibes', parseVibes(ev.vibes));
       document.getElementById('modalErr').style.display = 'none';
       document.getElementById('modalBackdrop').classList.add('open');
       document.getElementById('editTitle').focus();
@@ -504,6 +565,7 @@
       organizer:   document.getElementById('editOrganizer').value.trim() || null,
       description: document.getElementById('editDesc').value.trim()      || null,
       event_type:  document.getElementById('editType').value,
+      vibes:       JSON.stringify(getVibes('editVibes')),
     };
     const errEl = document.getElementById('modalErr');
     if (!fields.title) { errEl.textContent = 'Title is required.'; errEl.style.display = 'block'; return; }
@@ -516,7 +578,7 @@
       if (thenApprove) {
         await fetch(`/api/events/${id}/status`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'published' }),
+          body: JSON.stringify({ status: 'approved' }),
         });
         toast('Saved and approved', 'success');
       } else {
@@ -535,6 +597,30 @@
     el.textContent = msg; el.className = `show ${type}`;
     clearTimeout(_toastTimer);
     _toastTimer = setTimeout(() => { el.className = ''; }, 2800);
+  }
+
+  function vibeHtml(vibes) {
+    let tags = [];
+    try { tags = JSON.parse(vibes || '[]'); } catch {}
+    if (!tags.length) return '';
+    return `<div class="vibe-tags">${tags.map(v => `<span class="vibe-tag">${esc(v)}</span>`).join('')}</div>`;
+  }
+
+  const ALL_VIBES = ['social','career','academic','arts','culture','outdoors','sports','food','wellness','volunteering'];
+
+  function parseVibes(v) {
+    try { return Array.isArray(v) ? v : JSON.parse(v || '[]'); } catch { return []; }
+  }
+
+  function renderVibePicker(containerId, selected) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = ALL_VIBES.map(v =>
+      `<button type="button" class="vibe-chip${selected.includes(v) ? ' on' : ''}" data-vibe="${v}" onclick="this.classList.toggle('on')">${v}</button>`
+    ).join('');
+  }
+
+  function getVibes(containerId) {
+    return [...document.querySelectorAll(`#${containerId} .vibe-chip.on`)].map(b => b.dataset.vibe);
   }
 
   function esc(s) {

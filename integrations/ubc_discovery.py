@@ -68,6 +68,48 @@ def _strip_nones(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None}
 
 
+def list_events(page_size: int = 20) -> list[dict]:
+    """
+    Fetch all events from UBC Discovery using GET /events?skip=0&limit=20.
+    Paginates until exhausted. Public endpoint — no auth required.
+    Returns an empty list if UBC_DISCOVERY_API_URL is not configured.
+    """
+    if not config.UBC_DISCOVERY_API_URL:
+        return []
+
+    base_url = config.UBC_DISCOVERY_API_URL.rstrip("/") + "/events"
+    all_events: list[dict] = []
+    skip = 0
+
+    while True:
+        try:
+            resp = requests.get(
+                base_url,
+                params={"skip": skip, "limit": page_size},
+                headers={"Accept": "application/json"},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            page = resp.json()
+        except Exception as e:
+            log.warning("Could not fetch UBC Discovery events (skip=%d): %s", skip, e)
+            break
+
+        items = page if isinstance(page, list) else page.get("events", [])
+
+        if not items:
+            break
+
+        all_events.extend(items)
+
+        if len(items) < page_size:
+            break
+
+        skip += page_size
+
+    return all_events
+
+
 def publish_event(event: dict) -> CreatedEvent:
     """
     POST the approved event to UBC Discovery.

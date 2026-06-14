@@ -89,48 +89,76 @@ def fetch_posts(
 ) -> tuple[list[RawPost], Optional[str]]:
     """
     Fetch posts for *username* whose taken_at falls in [start_date, end_date].
-    Returns (posts, error_message).
+    Paginates using next_max_id until all posts in the date range are collected
+    or there are no more pages. Returns (posts, error_message).
     """
-    url = (
+    base_url = (
         f"https://www.instagram.com/api/v1/feed/user/"
-        f"{urllib.parse.quote(username)}/username/?count={config.IG_POST_COUNT}"
+        f"{urllib.parse.quote(username)}/username/?count=12&__a=1&__d=dis"
     )
-    url = url + f"&__a=1&__d=dis"
-
-    # Add Referer to the API call too
-    req = urllib.request.Request(url, headers={
+    headers = {
         "User-Agent": config.UA,
         "Accept": "application/json",
         "X-IG-App-ID": config.IG_APP_ID,
         "Referer": f"https://www.instagram.com/{username}/",
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            data = json.loads(r.read().decode("utf-8", "replace"))
-    except Exception as e:
-        return [], str(e)
+    }
 
     posts: list[RawPost] = []
-    for item in data.get("items") or []:
-        taken = item.get("taken_at") or 0
-        post_dt = datetime.fromtimestamp(taken, tz=timezone.utc)
-        post_date = post_dt.date()
+    next_max_id: Optional[str] = None
+    seen: set[str] = set()
 
-        if post_date < start_date or post_date > end_date:
-            continue
+    while True:
+        url = base_url + (f"&max_id={urllib.parse.quote(next_max_id)}" if next_max_id else "")
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.loads(r.read().decode("utf-8", "replace"))
+        except Exception as e:
+            return posts, str(e)
 
-        caption = _clean((item.get("caption") or {}).get("text") or "")
-        img_url = _img_url(item)
-        image_path = _download_image(img_url, username) if download_images and img_url else None
+        items = data.get("items") or []
+        if not items:
+            break
 
-        posts.append(RawPost(
-            source="instagram",
-            username=username,
-            post_url=_post_url(username, item),
-            taken_at=post_dt.isoformat(),
-            caption=caption,
-            image_path=image_path,
-        ))
+        oldest_in_page: Optional[date] = None
+        for item in items:
+            taken = item.get("taken_at") or 0
+            post_dt = datetime.fromtimestamp(taken, tz=timezone.utc)
+            post_date = post_dt.date()
+
+            if oldest_in_page is None or post_date < oldest_in_page:
+                oldest_in_page = post_date
+
+            post_id = item.get("pk") or item.get("id") or ""
+            if post_id in seen:
+                continue
+            seen.add(post_id)
+
+            if post_date < start_date or post_date > end_date:
+                continue
+
+            caption = _clean((item.get("caption") or {}).get("text") or "")
+            img_url = _img_url(item)
+            image_path = _download_image(img_url, username) if download_images and img_url else None
+
+            posts.append(RawPost(
+                source="instagram",
+                username=username,
+                post_url=_post_url(username, item),
+                taken_at=post_dt.isoformat(),
+                caption=caption,
+                image_path=image_path,
+            ))
+
+        # Stop paginating once we've gone past the start of the date range
+        if oldest_in_page and oldest_in_page < start_date:
+            break
+
+        next_max_id = data.get("next_max_id")
+        if not next_max_id or not data.get("more_available"):
+            break
+
+        time.sleep(0.3)
 
     return posts, None
 

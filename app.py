@@ -10,12 +10,14 @@ import config
 from integrations.ubc_discovery import (
     UBCDiscoveryConflict,
     UBCDiscoveryError,
+    list_events as ubc_list_events,
     publish_event,
 )
 from pipeline.runner import run
 from storage.store import (
     bulk_delete,
     bulk_set_status,
+    create_event,
     delete_event,
     fetch_events,
     get_event,
@@ -88,7 +90,59 @@ def review():
     return render_template("review.html")
 
 
-@app.route("/api/events")
+@app.route("/hub")
+def hub():
+    return render_template("hub.html")
+
+
+@app.route("/api/hub")
+def api_hub():
+    """
+    Returns a merged, chronologically sorted list of:
+    - All EventScraper events with status review/approved/published
+    - All events fetched from UBC Discovery (if configured)
+
+    Each item has a `_source` field: "scraper" or "ubc_discovery".
+    Scraper events already in UBC Discovery are flagged with `_also_in_ubc`.
+    """
+    scraper_events = fetch_events(status=None)
+    scraper_events = [e for e in scraper_events if e["status"] in ("review", "approved", "published")]
+
+    ubc_events_raw = ubc_list_events()
+
+    # Build a set of UBC Discovery IDs already linked from scraper events
+    linked_ubc_ids = {e["ubc_discovery_event_id"] for e in scraper_events if e.get("ubc_discovery_event_id")}
+
+    # Normalise UBC Discovery events into a common shape
+    ubc_events = []
+    for ev in ubc_events_raw:
+        ubc_id = str(ev.get("id", ""))
+        if ubc_id in linked_ubc_ids:
+            continue  # already represented by a scraper event
+        ubc_events.append({
+            "_source": "ubc_discovery",
+            "id": ubc_id,
+            "title": ev.get("title", ""),
+            "date": (ev.get("event_date") or "")[:10] or None,
+            "time": (ev.get("event_date") or "")[11:16] or None,
+            "location": ev.get("location_name"),
+            "organizer": ev.get("club_name"),
+            "description": ev.get("description"),
+            "source_url": ev.get("source_url"),
+            "status": "published",
+        })
+
+    for ev in scraper_events:
+        ev["_source"] = "scraper"
+        ev["_also_in_ubc"] = bool(ev.get("ubc_discovery_event_id"))
+
+    combined = scraper_events + ubc_events
+    combined.sort(key=lambda e: (e.get("date") or "0000-00-00", e.get("time") or ""), reverse=True)
+
+    return jsonify(combined)
+
+
+@app.route("/api/events", methods=["GET"])
 def api_events():
     rows = search_events(
         q=request.args.get("q", ""),
@@ -97,6 +151,15 @@ def api_events():
         limit=int(request.args.get("limit", 200)),
     )
     return jsonify(rows)
+
+
+@app.route("/api/events", methods=["POST"])
+def api_create_event():
+    body = request.get_json(force=True) or {}
+    if not body.get("title", "").strip():
+        return jsonify({"error": "Title is required"}), 400
+    row = create_event(body)
+    return jsonify(row), 201
 
 
 @app.route("/api/events/counts")
@@ -127,7 +190,7 @@ def api_set_status(event_id: int):
     new_status = body.get("status", "")
 
     if new_status == "published":
-        return _approve_and_publish(event_id)
+        return _publish_to_ubc(event_id)
 
     try:
         row = set_event_status(event_id, new_status)
@@ -138,18 +201,16 @@ def api_set_status(event_id: int):
     return jsonify(row)
 
 
-def _approve_and_publish(event_id: int):
+def _publish_to_ubc(event_id: int):
     """
-    Human-approval gate: push the event to UBC Discovery, then mark it
-    published locally.  If UBC Discovery is not configured, fall back to
-    local-only publish so development still works.
+    Push an approved event to UBC Discovery and mark it published.
+    If UBC Discovery is not configured, mark published locally (dev mode).
     """
     event = get_event(event_id)
     if event is None:
         return jsonify({"error": "Not found"}), 404
 
     if not config.UBC_DISCOVERY_API_URL:
-        # Not configured — local-only approve (dev/test mode).
         row = set_event_status(event_id, "published")
         return jsonify({**row, "ubc_discovery_skipped": True})
 
@@ -159,12 +220,10 @@ def _approve_and_publish(event_id: int):
         return jsonify(row)
 
     except UBCDiscoveryConflict as e:
-        # Already exists in UBC Discovery — treat as success, store their ID.
         row = record_ubc_publish(event_id, ubc_event_id=e.existing_id)
         return jsonify({**row, "ubc_discovery_conflict": True})
 
     except (UBCDiscoveryError, Exception) as e:
-        # API call failed — record the error, do NOT mark published.
         record_ubc_publish(event_id, ubc_event_id=None, error=str(e))
         return jsonify({"error": f"UBC Discovery publish failed: {e}"}), 502
 

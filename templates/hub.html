@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Hub — Event Hub</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0d0d0d;
+    --surface:  #161616;
+    --surface2: #1f1f1f;
+    --border:   #272727;
+    --border2:  #333;
+    --text:     #e0e0e0;
+    --muted:    #666;
+    --muted2:   #999;
+    --green:    #22c55e;
+    --green-bg: #052e16;
+    --blue:     #60a5fa;
+    --blue-bg:  #0c1a2e;
+    --amber:    #f59e0b;
+    --amber-bg: #1c1000;
+    --red:      #ef4444;
+    --red-bg:   #1f0808;
+    --purple:   #c084fc;
+    --purple-bg:#1a0a1a;
+    --accent:   #e1306c;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* topbar */
+  .topbar { position: sticky; top: 0; z-index: 100; background: rgba(13,13,13,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); padding: 0 1.5rem; height: 52px; display: flex; align-items: center; gap: 1.5rem; }
+  .topbar-brand { font-size: 0.95rem; font-weight: 700; background: linear-gradient(90deg,#e1306c,#d6249f); -webkit-background-clip: text; -webkit-text-fill-color: transparent; white-space: nowrap; }
+  .topbar-nav { display: flex; gap: 0.1rem; }
+  .topbar-nav a { font-size: 0.82rem; color: var(--muted2); text-decoration: none; padding: 0.35rem 0.7rem; border-radius: 6px; transition: background .15s, color .15s; display: flex; align-items: center; gap: 0.4rem; }
+  .topbar-nav a:hover { background: var(--surface2); color: var(--text); }
+  .topbar-nav a.active { background: var(--surface2); color: var(--text); }
+  .alpha-badge { font-size: 0.68rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 999px; background: var(--purple-bg); color: var(--purple); border: 1px solid #5b21b6; }
+  .topbar-spacer { flex: 1; }
+
+  /* layout */
+  .layout { display: flex; height: calc(100vh - 52px); overflow: hidden; }
+
+  /* main */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .toolbar { padding: 0.75rem 1.4rem; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.6rem; flex-shrink: 0; }
+  .toolbar-row { display: flex; gap: 0.65rem; align-items: center; flex-wrap: wrap; }
+  .mode-select { background: #000; border: 1px solid var(--border2); border-radius: 8px; color: var(--text); padding: 0.46rem 0.7rem; font-size: 0.85rem; outline: none; font-family: inherit; cursor: pointer; }
+  .mode-select:focus { border-color: var(--accent); }
+  .mode-select option { background: #000; }
+  .nav-counter { font-size: 0.82rem; color: var(--muted2); white-space: nowrap; }
+  .nav-btn { background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; color: var(--muted2); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .12s, color .12s; flex-shrink: 0; }
+  .nav-btn:hover { background: var(--border2); color: var(--text); }
+  .nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .search-wrap { position: relative; flex: 1; min-width: 180px; max-width: 320px; }
+  .search-wrap input { width: 100%; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; color: var(--text); padding: 0.48rem 0.8rem 0.48rem 2.1rem; font-size: 0.88rem; outline: none; transition: border-color .15s; }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-icon { position: absolute; left: 0.62rem; top: 50%; transform: translateY(-50%); color: var(--muted); display: flex; pointer-events: none; }
+  .date-input { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; color: var(--text); padding: 0.48rem 0.7rem; font-size: 0.85rem; outline: none; transition: border-color .15s; font-family: inherit; }
+  .date-input:focus { border-color: var(--accent); }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+  .date-sep { font-size: 0.8rem; color: var(--muted); }
+  .toolbar-info { font-size: 0.8rem; color: var(--muted); margin-left: auto; }
+
+  /* event list */
+  .event-list { flex: 1; overflow-y: auto; padding: 1rem 1.4rem; }
+  .empty-state { text-align: center; padding: 4rem 1rem; color: var(--muted); font-size: 0.9rem; }
+
+  /* date group */
+  .date-group-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 1.2rem 0 0.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+  .date-group-label:first-child { margin-top: 0; }
+
+  /* event row */
+  .event-row { display: flex; align-items: flex-start; gap: 0.8rem; padding: 0.9rem 1rem; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid transparent; border-radius: 10px; margin-bottom: 0.5rem; }
+  .event-row.status-published { border-left-color: var(--purple); }
+  .event-row.status-approved  { border-left-color: var(--green); }
+  .event-row.status-review    { border-left-color: var(--amber); }
+  .event-row.source-ubc       { border-left-color: var(--purple); opacity: 0.8; }
+  .row-body { flex: 1; min-width: 0; }
+  .row-header { display: flex; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
+  .row-title { font-size: 0.92rem; font-weight: 600; flex: 1; min-width: 0; }
+  .badge { font-size: 0.67rem; font-weight: 600; padding: 0.13rem 0.48rem; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
+  .badge-published { background: var(--green-bg); color: var(--green); }
+  .badge-approved  { background: var(--blue-bg);  color: var(--blue); }
+  .badge-review    { background: var(--amber-bg); color: var(--amber); }
+  .badge-ubc       { background: var(--purple-bg); color: var(--purple); }
+  .row-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 0.8rem; font-size: 0.77rem; color: var(--muted2); }
+  .vibe-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+  .vibe-tag { font-size: 0.68rem; padding: 0.12rem 0.45rem; border-radius: 999px; background: #1a1a2e; color: #818cf8; border: 1px solid #3730a3; }
+  .source-tag { font-size: 0.68rem; padding: 0.12rem 0.45rem; border-radius: 999px; background: #1a0e00; color: #fb923c; border: 1px solid #7c3a00; }
+  .row-meta span { display: flex; align-items: center; gap: 0.25rem; }
+  .row-actions { display: flex; gap: 0.35rem; flex-shrink: 0; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; }
+  .action-btn { font-size: 0.73rem; font-weight: 600; padding: 0.26rem 0.6rem; border-radius: 6px; border: 1px solid; cursor: pointer; white-space: nowrap; transition: opacity .15s; background: transparent; display: flex; align-items: center; gap: 0.25rem; }
+  .action-btn:hover { opacity: 0.75; }
+  .action-btn:disabled { opacity: 0.3; cursor: default; }
+  .btn-approve { color: var(--green); border-color: #166534; }
+  .btn-publish { color: var(--blue);  border-color: #1e3a5f; }
+  .btn-reject  { color: var(--red);   border-color: #7f1d1d; }
+  .btn-review  { color: var(--amber); border-color: #78350f; }
+
+  /* modal */
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 200; align-items: center; justify-content: center; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 1.75rem; width: min(560px,95vw); max-height: 90vh; overflow-y: auto; }
+  .modal h2 { font-size: 1rem; font-weight: 700; margin-bottom: 1.2rem; }
+  .modal-fields { display: flex; flex-direction: column; gap: 0.9rem; }
+  .modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+  .modal-field { display: flex; flex-direction: column; gap: 0.3rem; }
+  .modal-field label { font-size: 0.76rem; color: var(--muted2); }
+  .modal-field input, .modal-field textarea { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; color: var(--text); padding: 0.5rem 0.7rem; font-size: 0.88rem; outline: none; transition: border-color .15s; font-family: inherit; }
+  .modal-field input:focus, .modal-field textarea:focus { border-color: var(--accent); }
+  .modal-field textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+  .modal-footer { display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 1.4rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .modal-btn { font-size: 0.86rem; font-weight: 600; padding: 0.5rem 1.2rem; border-radius: 8px; border: none; cursor: pointer; transition: opacity .15s; display: flex; align-items: center; gap: 0.4rem; }
+  .modal-btn:hover { opacity: 0.85; }
+  .modal-save   { background: var(--accent); color: #fff; }
+  .modal-cancel { background: var(--surface2); color: var(--muted2); }
+  .modal-err { font-size: 0.8rem; color: var(--red); margin-top: 0.5rem; display: none; }
+  .vibe-picker { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .vibe-chip { font-size: 0.75rem; font-weight: 600; padding: 0.22rem 0.6rem; border-radius: 999px; border: 1px solid #3730a3; background: transparent; color: var(--muted2); cursor: pointer; transition: background .12s, color .12s; }
+  .vibe-chip.on { background: #1a1a2e; color: #818cf8; }
+
+  /* toast */
+  #toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 300; background: var(--surface2); border: 1px solid var(--border2); border-radius: 10px; padding: 0.75rem 1.2rem; font-size: 0.85rem; color: var(--text); box-shadow: 0 8px 30px rgba(0,0,0,.4); transform: translateY(20px); opacity: 0; transition: transform .25s, opacity .25s; pointer-events: none; }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { border-color: #166534; color: var(--green); }
+  #toast.error   { border-color: #7f1d1d; color: var(--red); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-brand">Event Hub</span>
+  <nav class="topbar-nav">
+    <a href="/">Instagram Scraper</a>
+    <a href="/review">Review Queue</a>
+    <a href="/hub" class="active">The Hub <span class="alpha-badge">alpha</span></a>
+  </nav>
+  <div class="topbar-spacer"></div>
+  <div id="topbarInfo" style="font-size:.78rem;color:var(--muted)"></div>
+</div>
+
+<div class="layout">
+  <div class="main">
+    <div class="toolbar">
+      <div class="toolbar-row">
+        <div class="search-wrap">
+          <span class="search-icon">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+          </span>
+          <input id="searchInput" type="text" placeholder="Search events…" oninput="applyFilters()">
+        </div>
+        <select id="sourceFilter" class="mode-select" onchange="applyFilters()">
+          <option value="">All sources</option>
+        </select>
+        <input type="date" id="dateFrom" class="date-input" oninput="applyFilters()">
+        <span class="date-sep">→</span>
+        <input type="date" id="dateTo" class="date-input" oninput="applyFilters()">
+        <span class="toolbar-info" id="toolbarInfo"></span>
+        <button id="publishAllBtn" style="font-size:0.8rem;font-weight:600;padding:0.38rem 0.9rem;border-radius:7px;border:1px solid #1e3a5f;background:var(--blue-bg);color:var(--blue);cursor:pointer;transition:opacity .15s;" onclick="publishAll()">Publish All Approved to UBC</button>
+        <button style="font-size:0.8rem;font-weight:600;padding:0.38rem 0.9rem;border-radius:7px;border:1px solid #5b21b6;background:var(--purple-bg);color:var(--purple);cursor:pointer;transition:opacity .15s;" onclick="openAddModal()">+ Add Event</button>
+      </div>
+      <div class="toolbar-row">
+        <select id="navMode" class="mode-select" onchange="updateNav()">
+          <option value="">Jump to…</option>
+          <option value="review">To Review</option>
+          <option value="approved">Approved</option>
+          <option value="review,approved">Either</option>
+        </select>
+        <button class="nav-btn" id="navUp" onclick="navStep(-1)" disabled title="Previous">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4-4 4 4"/></svg>
+        </button>
+        <button class="nav-btn" id="navDown" onclick="navStep(1)" disabled title="Next">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg>
+        </button>
+        <span class="nav-counter" id="navCounter"></span>
+      </div>
+    </div>
+
+    <div class="event-list" id="eventList">
+      <div class="empty-state">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Event modal -->
+<div class="modal-backdrop" id="addModalBackdrop" onclick="closeAddModalOnBackdrop(event)">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2>Add Event</h2>
+    <div class="modal-fields">
+      <div class="modal-field">
+        <label>Title *</label>
+        <input id="addTitle" type="text">
+      </div>
+      <div class="modal-row">
+        <div class="modal-field">
+          <label>Date</label>
+          <input id="addDate" type="date">
+        </div>
+        <div class="modal-field">
+          <label>Time</label>
+          <input id="addTime" type="time">
+        </div>
+      </div>
+      <div class="modal-field">
+        <label>Location</label>
+        <input id="addLocation" type="text">
+      </div>
+      <div class="modal-field">
+        <label>Organizer</label>
+        <input id="addOrganizer" type="text">
+      </div>
+      <div class="modal-field">
+        <label>Source URL</label>
+        <input id="addSourceUrl" type="url" placeholder="https://…">
+      </div>
+      <div class="modal-field">
+        <label>Source</label>
+        <input id="addSourceLabel" type="text" value="Manual" placeholder="e.g. Manual, Instagram, Email…">
+      </div>
+      <div class="modal-field">
+        <label>Description</label>
+        <textarea id="addDesc"></textarea>
+      </div>
+      <div class="modal-field">
+        <label>Vibes</label>
+        <div class="vibe-picker" id="addVibes"></div>
+      </div>
+      <div class="modal-field">
+        <label>Initial status</label>
+        <select id="addStatus" style="background:#000;border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:0.5rem 0.7rem;font-size:0.88rem;outline:none;font-family:inherit;">
+          <option value="review">To Review</option>
+          <option value="approved">Approved</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-err" id="addModalErr"></div>
+    <div class="modal-footer">
+      <button class="modal-btn modal-cancel" onclick="closeAddModal()">Cancel</button>
+      <button class="modal-btn modal-save" onclick="saveAdd()">Add Event</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal-backdrop" id="modalBackdrop" onclick="closeModalOnBackdrop(event)">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2>Edit event</h2>
+    <input type="hidden" id="editId">
+    <div class="modal-fields">
+      <div class="modal-field">
+        <label>Title *</label>
+        <input id="editTitle" type="text">
+      </div>
+      <div class="modal-row">
+        <div class="modal-field">
+          <label>Date</label>
+          <input id="editDate" type="date">
+        </div>
+        <div class="modal-field">
+          <label>Time</label>
+          <input id="editTime" type="time">
+        </div>
+      </div>
+      <div class="modal-field">
+        <label>Location</label>
+        <input id="editLocation" type="text">
+      </div>
+      <div class="modal-field">
+        <label>Organizer</label>
+        <input id="editOrganizer" type="text">
+      </div>
+      <div class="modal-field">
+        <label>Description</label>
+        <textarea id="editDesc"></textarea>
+      </div>
+      <div class="modal-field">
+        <label>Vibes</label>
+        <div class="vibe-picker" id="editVibes"></div>
+      </div>
+    </div>
+    <div class="modal-err" id="modalErr"></div>
+    <div class="modal-footer">
+      <button class="modal-btn modal-cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-btn modal-save" onclick="saveEdit()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const IC = {
+    person:   `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>`,
+    calendar: `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 1v4M11 1v4M2 7h12"/></svg>`,
+    clock:    `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg>`,
+    pin:      `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5C5.5 1.5 3.5 3.5 3.5 6c0 3.5 4.5 8.5 4.5 8.5s4.5-5 4.5-8.5C12.5 3.5 10.5 1.5 8 1.5z"/><circle cx="8" cy="6" r="1.5"/></svg>`,
+    check:    `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 8l4 4 6-7"/></svg>`,
+    x:        `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>`,
+    undo:     `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 4H2V2"/><path d="M2 4a6 6 0 1 1 .9 6"/></svg>`,
+    link:     `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 3H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9"/><path d="M10 2h4v4"/><path d="M13.5 2.5L8 8"/></svg>`,
+  };
+
+  let _allEvents = [];
+  let _navItems = [];   // ordered list of event row elements matching nav mode
+  let _navIdx   = -1;
+
+  loadHub();
+
+  async function loadHub() {
+    try {
+      _allEvents = await fetch('/api/hub').then(r => r.json());
+      document.getElementById('topbarInfo').textContent = `${_allEvents.length} events`;
+      populateSourceFilter();
+      applyFilters();
+    } catch (e) {
+      document.getElementById('eventList').innerHTML = `<div class="empty-state">Failed to load: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function eventSourceLabel(e) {
+    if (e._source === 'ubc_discovery') return 'UBC Discovery';
+    return e.source_label || 'Instagram';
+  }
+
+  function populateSourceFilter() {
+    const sources = [...new Set(_allEvents.map(eventSourceLabel))].sort();
+    if (!sources.includes('Manual')) sources.push('Manual');
+    sources.sort();
+    const sel = document.getElementById('sourceFilter');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">All sources</option>' +
+      sources.map(s => `<option value="${esc(s)}" ${s === current ? 'selected' : ''}>${esc(s)}</option>`).join('');
+  }
+
+  function applyFilters() {
+    const q        = document.getElementById('searchInput').value.toLowerCase();
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo   = document.getElementById('dateTo').value;
+    const source   = document.getElementById('sourceFilter').value;
+
+    let events = _allEvents;
+
+    if (source) events = events.filter(e => eventSourceLabel(e) === source);
+    if (dateFrom) events = events.filter(e => (e.date || '') >= dateFrom);
+    if (dateTo)   events = events.filter(e => (e.date || '') <= dateTo);
+
+    if (q) {
+      events = events.filter(e =>
+        (e.title || '').toLowerCase().includes(q) ||
+        (e.organizer || '').toLowerCase().includes(q) ||
+        (e.location || '').toLowerCase().includes(q)
+      );
+    }
+
+    document.getElementById('toolbarInfo').textContent = `${events.length} event${events.length !== 1 ? 's' : ''}`;
+    renderList(events);
+    updateNav();
+  }
+
+  function renderList(events) {
+    const list = document.getElementById('eventList');
+    if (!events.length) {
+      list.innerHTML = '<div class="empty-state">No events match the current filter.</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    let lastDate = null;
+
+    for (const ev of events) {
+      const dateKey = ev.date || 'No date';
+      if (dateKey !== lastDate) {
+        const label = document.createElement('div');
+        label.className = 'date-group-label';
+        label.textContent = dateKey === 'No date' ? 'No date' : formatDate(dateKey);
+        list.appendChild(label);
+        lastDate = dateKey;
+      }
+      list.appendChild(buildRow(ev));
+    }
+  }
+
+  function buildRow(ev) {
+    const div = document.createElement('div');
+    const isUbc = ev._source === 'ubc_discovery';
+    div.className = `event-row ${isUbc ? 'source-ubc' : 'status-' + ev.status}`;
+    div.dataset.id = ev.id;
+
+    const isApp    = ev.status === 'approved';
+    const isPub    = ev.status === 'published';
+    const isInUbc  = ev._also_in_ubc;
+
+    let badgeHtml = isUbc
+      ? `<span class="badge badge-ubc">UBC Discovery</span>`
+      : isInUbc
+        ? ''
+        : `<span class="badge badge-${ev.status}">${ev.status}</span>`;
+
+    if (isInUbc) badgeHtml += `<span class="badge badge-ubc">Published to UBC Discovery</span>`;
+
+    const pencil = `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/><path d="M9.5 4.5l2 2"/></svg>`;
+    let actionsHtml = '';
+    if (!isUbc && !isInUbc) {
+      actionsHtml = `
+        <button class="action-btn btn-approve" onclick="setStatus(${ev.id},'approved')" ${isApp||isPub ? 'disabled' : ''}>${IC.check} Approve</button>
+        ${isApp ? `<button class="action-btn btn-publish" onclick="setStatus(${ev.id},'published')">${IC.link} Publish to UBC</button>` : ''}
+        <button class="action-btn btn-reject" onclick="setStatus(${ev.id},'rejected')">${IC.x} Reject</button>
+        ${isApp ? `<button class="action-btn btn-review" onclick="setStatus(${ev.id},'review')">${IC.undo} Review</button>` : ''}
+        <button class="action-btn btn-edit" onclick="openModal(${ev.id})" style="color:var(--muted2);border-color:var(--border2);">${pencil} Edit</button>
+      `;
+    }
+
+    div.innerHTML = `
+      <div class="row-body">
+        <div class="row-header">
+          <div class="row-title">${esc(ev.title || '(Untitled)')}</div>
+          ${badgeHtml}
+        </div>
+        <div class="row-meta">
+          ${ev.organizer ? `<span>${IC.person} ${esc(ev.organizer.replace(/^@/,''))}</span>` : ''}
+          ${ev.time      ? `<span>${IC.clock} ${esc(ev.time)}</span>`     : ''}
+          ${ev.location  ? `<span>${IC.pin} ${esc(ev.location)}</span>`   : ''}
+          ${ev.source_url ? `<span><a href="${esc(ev.source_url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;display:inline-flex;align-items:center;gap:0.25rem;">${IC.link} View Source</a></span>` : ''}
+        </div>
+        ${vibeHtml(ev.vibes, eventSourceLabel(ev))}
+      </div>
+      <div class="row-actions">${actionsHtml}</div>
+    `;
+    return div;
+  }
+
+  function updateNav() {
+    const mode = document.getElementById('navMode').value;
+    const statuses = mode.split(',').filter(Boolean);
+    _navItems = [];
+    _navIdx = -1;
+
+    if (statuses.length) {
+      document.querySelectorAll('.event-row[data-id]').forEach(row => {
+        const id = parseInt(row.dataset.id);
+        const ev = _allEvents.find(e => e.id === id);
+        if (ev && ev._source === 'scraper' && statuses.includes(ev.status)) {
+          _navItems.push(row);
+        }
+      });
+    }
+
+    const label = { review: 'to review', approved: 'approved', 'review,approved': 'to action' }[mode] || '';
+    const count = _navItems.length;
+    document.getElementById('navCounter').textContent = count && mode ? `${count} ${label}` : '';
+    document.getElementById('navUp').disabled   = count === 0;
+    document.getElementById('navDown').disabled = count === 0;
+  }
+
+  function navStep(dir) {
+    if (!_navItems.length) return;
+    _navIdx = (_navIdx + dir + _navItems.length) % _navItems.length;
+    const row = _navItems[_navIdx];
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.style.outline = '2px solid var(--accent)';
+    setTimeout(() => row.style.outline = '', 1200);
+    const mode = document.getElementById('navMode').value;
+    const label = { review: 'to review', approved: 'approved', 'review,approved': 'to action' }[mode] || '';
+    document.getElementById('navCounter').textContent = `${_navIdx + 1} of ${_navItems.length} ${label}`;
+  }
+
+  async function publishAll() {
+    const approved = _allEvents.filter(e => e._source === 'scraper' && e.status === 'approved');
+    if (!approved.length) { toast('No approved events to publish', ''); return; }
+    if (!confirm(`Publish all ${approved.length} approved event${approved.length !== 1 ? 's' : ''} to UBC Discovery?`)) return;
+    const btn = document.getElementById('publishAllBtn');
+    btn.disabled = true;
+    let succeeded = 0, failed = 0;
+    for (const ev of approved) {
+      try {
+        const resp = await fetch(`/api/events/${ev.id}/status`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'published' }),
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
+        succeeded++;
+      } catch { failed++; }
+    }
+    btn.disabled = false;
+    toast(`${succeeded} published${failed ? `, ${failed} failed` : ''}`, failed ? 'error' : 'success');
+    await loadHub();
+  }
+
+  async function setStatus(id, status) {
+    document.querySelector(`.event-row[data-id="${id}"]`)?.style.setProperty('outline', 'none');
+    try {
+      const resp = await fetch(`/api/events/${id}/status`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
+      const label = { published: 'published to UBC Discovery', approved: 'approved', rejected: 'rejected', review: 'moved to review' };
+      toast(`Event ${label[status] || status}`, 'success');
+      await loadHub();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  function formatDate(d) {
+    try {
+      return new Date(d + 'T12:00:00').toLocaleDateString('en-CA', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' });
+    } catch { return d; }
+  }
+
+  let _toastTimer = null;
+  function toast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.className = `show ${type}`;
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { el.className = ''; }, 2800);
+  }
+
+  const ALL_VIBES = ['social','career','academic','arts','culture','outdoors','sports','food','wellness','volunteering'];
+
+  function parseVibes(v) {
+    try { return Array.isArray(v) ? v : JSON.parse(v || '[]'); } catch { return []; }
+  }
+
+  function renderVibePicker(containerId, selected) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = ALL_VIBES.map(v =>
+      `<button type="button" class="vibe-chip${selected.includes(v) ? ' on' : ''}" data-vibe="${v}" onclick="this.classList.toggle('on')">${v}</button>`
+    ).join('');
+  }
+
+  function getVibes(containerId) {
+    return [...document.querySelectorAll(`#${containerId} .vibe-chip.on`)].map(b => b.dataset.vibe);
+  }
+
+  function openAddModal() {
+    ['addTitle','addDate','addTime','addLocation','addOrganizer','addSourceUrl','addDesc'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('addSourceLabel').value = 'Manual';
+    document.getElementById('addStatus').value = 'review';
+    renderVibePicker('addVibes', []);
+    document.getElementById('addModalErr').style.display = 'none';
+    document.getElementById('addModalBackdrop').classList.add('open');
+    document.getElementById('addTitle').focus();
+  }
+
+  function closeAddModal() { document.getElementById('addModalBackdrop').classList.remove('open'); }
+  function closeAddModalOnBackdrop(e) { if (e.target === document.getElementById('addModalBackdrop')) closeAddModal(); }
+
+  async function saveAdd() {
+    const fields = {
+      title:       document.getElementById('addTitle').value.trim(),
+      date:        document.getElementById('addDate').value      || null,
+      time:        document.getElementById('addTime').value      || null,
+      location:    document.getElementById('addLocation').value.trim()    || null,
+      organizer:   document.getElementById('addOrganizer').value.trim()   || null,
+      source_url:   document.getElementById('addSourceUrl').value.trim()    || null,
+      source_label: document.getElementById('addSourceLabel').value.trim() || 'Manual',
+      description: document.getElementById('addDesc').value.trim()        || null,
+      vibes:       JSON.stringify(getVibes('addVibes')),
+      status:      document.getElementById('addStatus').value,
+    };
+    const errEl = document.getElementById('addModalErr');
+    if (!fields.title) { errEl.textContent = 'Title is required.'; errEl.style.display = 'block'; return; }
+    try {
+      const resp = await fetch('/api/events', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      });
+      if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
+      toast('Event added', 'success');
+      closeAddModal();
+      await loadHub();
+    } catch (e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+  }
+
+  async function openModal(id) {
+    try {
+      const ev = await fetch(`/api/events/${id}`).then(r => r.json());
+      document.getElementById('editId').value       = ev.id;
+      document.getElementById('editTitle').value    = ev.title       || '';
+      document.getElementById('editDate').value     = ev.date        || '';
+      document.getElementById('editTime').value     = ev.time        || '';
+      document.getElementById('editLocation').value = ev.location    || '';
+      document.getElementById('editOrganizer').value= ev.organizer   || '';
+      document.getElementById('editDesc').value        = ev.description  || '';
+      renderVibePicker('editVibes', parseVibes(ev.vibes));
+      document.getElementById('modalErr').style.display = 'none';
+      document.getElementById('modalBackdrop').classList.add('open');
+      document.getElementById('editTitle').focus();
+    } catch (e) { toast('Failed to load event: ' + e.message, 'error'); }
+  }
+
+  function closeModal() { document.getElementById('modalBackdrop').classList.remove('open'); }
+  function closeModalOnBackdrop(e) { if (e.target === document.getElementById('modalBackdrop')) closeModal(); }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  async function saveEdit() {
+    const id = document.getElementById('editId').value;
+    const fields = {
+      title:       document.getElementById('editTitle').value.trim(),
+      date:        document.getElementById('editDate').value     || null,
+      time:        document.getElementById('editTime').value     || null,
+      location:    document.getElementById('editLocation').value.trim()   || null,
+      organizer:   document.getElementById('editOrganizer').value.trim()  || null,
+      description: document.getElementById('editDesc').value.trim()       || null,
+      vibes:        JSON.stringify(getVibes('editVibes')),
+    };
+    const errEl = document.getElementById('modalErr');
+    if (!fields.title) { errEl.textContent = 'Title is required.'; errEl.style.display = 'block'; return; }
+    try {
+      const resp = await fetch(`/api/events/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      });
+      if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
+      toast('Changes saved', 'success');
+      closeModal();
+      await loadHub();
+    } catch (e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+  }
+
+  function vibeHtml(vibes, source) {
+    let tags = [];
+    try { tags = Array.isArray(vibes) ? vibes : JSON.parse(vibes || '[]'); } catch {}
+    const sourceTag = source ? `<span class="source-tag">${esc(source)}</span>` : '';
+    if (!sourceTag && !tags.length) return '';
+    return `<div class="vibe-tags">${sourceTag}${tags.map(v => `<span class="vibe-tag">${esc(v)}</span>`).join('')}</div>`;
+  }
+
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>

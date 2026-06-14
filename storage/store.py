@@ -61,6 +61,7 @@ _MIGRATIONS = [
     "ALTER TABLE events ADD COLUMN approved_at TEXT",
     "ALTER TABLE events ADD COLUMN approval_error TEXT",
     "ALTER TABLE events ADD COLUMN vibes TEXT",
+    "ALTER TABLE events ADD COLUMN source_label TEXT",
 ]
 
 
@@ -219,11 +220,49 @@ def update_event(event_id: int, fields: dict) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def set_event_status(event_id: int, status: str) -> Optional[dict]:
-    if status not in ("published", "review", "rejected"):
-        raise ValueError(f"Invalid status: {status!r}")
+def create_event(fields: dict) -> dict:
+    """Insert a manually created event and return the new row."""
+    now = datetime.now(timezone.utc).isoformat()
     conn = _connect()
-    conn.execute("UPDATE events SET status = ? WHERE id = ?", (status, event_id))
+    cur = conn.execute(
+        """INSERT INTO events
+           (status, confidence, title, date, time, location, description,
+            source_url, organizer, vibes, source_label, is_event, stored_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+        (
+            fields.get("status", "review"),
+            fields.get("confidence", 1.0),
+            fields.get("title", ""),
+            fields.get("date") or None,
+            fields.get("time") or None,
+            fields.get("location") or None,
+            fields.get("description") or None,
+            fields.get("source_url") or None,
+            fields.get("organizer") or None,
+            fields.get("vibes") or "[]",
+            fields.get("source_label") or "Manual",
+            now,
+        ),
+    )
+    event_id = cur.lastrowid
+    conn.commit()
+    row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def set_event_status(event_id: int, status: str) -> Optional[dict]:
+    if status not in ("published", "approved", "review", "rejected"):
+        raise ValueError(f"Invalid status: {status!r}")
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _connect()
+    if status == "approved":
+        conn.execute(
+            "UPDATE events SET status = ?, approved_at = ? WHERE id = ?",
+            (status, now, event_id),
+        )
+    else:
+        conn.execute("UPDATE events SET status = ? WHERE id = ?", (status, event_id))
     conn.commit()
     row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
     conn.close()
@@ -231,7 +270,7 @@ def set_event_status(event_id: int, status: str) -> Optional[dict]:
 
 
 def bulk_set_status(event_ids: list[int], status: str) -> int:
-    if status not in ("published", "review", "rejected"):
+    if status not in ("published", "approved", "review", "rejected"):
         raise ValueError(f"Invalid status: {status!r}")
     if not event_ids:
         return 0
