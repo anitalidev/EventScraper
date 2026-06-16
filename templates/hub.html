@@ -95,7 +95,7 @@
   .badge-published { background: var(--green-bg); color: var(--green); }
   .badge-approved  { background: var(--blue-bg);  color: var(--blue); }
   .badge-review    { background: var(--amber-bg); color: var(--amber); }
-  .badge-ubc       { background: var(--purple-bg); color: var(--purple); }
+  .badge-ubc       { background: var(--purple-bg); color: var(--purple); border: 1px solid #5b21b6; }
   .row-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 0.8rem; font-size: 0.77rem; color: var(--muted2); }
   .vibe-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
   .vibe-tag { font-size: 0.68rem; padding: 0.12rem 0.45rem; border-radius: 999px; background: #1a1a2e; color: #818cf8; border: 1px solid #3730a3; }
@@ -455,7 +455,7 @@
             ${badgeHtml}
           </div>
           <div class="row-meta">
-            ${ev.organizer ? `<span>${IC.person} ${esc(ev.organizer.replace(/^@/,''))}</span>` : ''}
+            ${ev.organizer ? `<span>${IC.person} ${esc(ev.organizer)}</span>` : ''}
             ${ev.time      ? `<span>${IC.clock} ${esc(ev.time)}</span>`     : ''}
             ${ev.location  ? `<span>${IC.pin} ${esc(ev.location)}</span>`   : ''}
             ${ev.source_url ? `<span><a href="${esc(ev.source_url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;display:inline-flex;align-items:center;gap:0.25rem;">${IC.link} View Source</a></span>` : ''}

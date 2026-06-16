@@ -35,6 +35,11 @@ UA: str = (
 UBC_DISCOVERY_API_URL: str = os.environ.get("UBC_DISCOVERY_API_URL", "")
 UBC_DISCOVERY_API_KEY: str = os.environ.get("UBC_DISCOVERY_API_KEY", "")
 
+# ── AWS / S3 (for uploading event images on publish) ────────────────────────
+AWS_REGION:     str = os.environ.get("AWS_REGION", "us-west-2")
+S3_BUCKET_NAME: str = os.environ.get("S3_BUCKET_NAME", "")
+S3_ENDPOINT_URL: str = os.environ.get("S3_ENDPOINT_URL", "")
+
 EVENT_TYPES = [
     "Workshop", "Networking", "Career", "Social", "Academic",
     "Sports", "Wellness", "Volunteer", "Arts", "Culture", "Food", "Other",

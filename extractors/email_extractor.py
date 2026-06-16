@@ -121,7 +121,7 @@ class EmailExtractor(BaseExtractor):
                     location=item.location,
                     description=item.description,
                     source_url=item.source_url or (post.post_url if post else ""),
-                    organizer=item.organizer,
+                    organizer=post.username if post else item.organizer,
                     vibes=item.vibes,
                     raw_ai_response=item.model_dump_json(),
                     source_post=post,

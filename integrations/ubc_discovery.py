@@ -8,15 +8,58 @@ from __future__ import annotations
 
 import json
 import logging
+import mimetypes
+import os
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Optional
 
+import boto3
 import requests
+from botocore.config import Config
 
 import config
 
 log = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _s3_client():
+    return boto3.client(
+        "s3",
+        region_name=config.AWS_REGION,
+        endpoint_url=config.S3_ENDPOINT_URL or None,
+        config=Config(signature_version="s3v4"),
+    )
+
+
+def _upload_image(local_path: str) -> Optional[str]:
+    """Upload a local image file to S3 and return the object key, or None on failure."""
+    if not config.S3_BUCKET_NAME:
+        log.warning("S3_BUCKET_NAME not configured — skipping image upload")
+        return None
+
+    ext = os.path.splitext(local_path)[1] or ".jpg"
+    key = f"event-images/{uuid.uuid4()}{ext}"
+    content_type = mimetypes.guess_type(local_path)[0] or "image/jpeg"
+
+    try:
+        with open(local_path, "rb") as f:
+            _s3_client().put_object(
+                Bucket=config.S3_BUCKET_NAME,
+                Key=key,
+                Body=f,
+                ContentType=content_type,
+            )
+        log.info("Uploaded event image to S3: %s", key)
+        os.remove(local_path)
+        log.info("Deleted local image: %s", local_path)
+        return key
+    except Exception as e:
+        log.warning("Failed to upload image %s to S3: %s", local_path, e)
+        return None
 
 
 class UBCDiscoveryError(Exception):
@@ -49,19 +92,20 @@ def _combine_datetime(date_str: Optional[str], time_str: Optional[str]) -> Optio
     return datetime.fromisoformat(dt_str).replace(tzinfo=timezone.utc).isoformat()
 
 
-def _build_payload(event: dict) -> dict:
+def _build_payload(event: dict, event_picture_key: Optional[str] = None) -> dict:
     """Map an EventScraper event dict to the UBC Discovery CreateEventRequest body."""
     return {
-        "title":         event["title"],
-        "description":   event.get("description") or "",
-        "club_name":     event.get("organizer"),
-        "source":        (event.get("source_label") or "manual").lower(),
-        "source_label":  event.get("source_label") or "manual",
-        "source_url":    event.get("source_url"),
-        "vibes":         json.loads(event.get("vibes") or "[]"),
-        "location_name": event.get("location"),
-        "event_date":    _combine_datetime(event.get("date"), event.get("time")),
-        "external_ref":  str(event["id"]),  # idempotency key (requires UBC Discovery change)
+        "title":             event["title"],
+        "description":       event.get("description") or "",
+        "club_name":         event.get("organizer"),
+        "source":            "instagram",
+        "source_label":      "ams_club",
+        "source_url":        event.get("source_url"),
+        "vibes":             json.loads(event.get("vibes") or "[]"),
+        "location_name":     event.get("location"),
+        "event_date":        _combine_datetime(event.get("date"), event.get("time")),
+        "external_ref":      str(event["id"]),  # idempotency key (requires UBC Discovery change)
+        "event_picture_key": event_picture_key,
     }
 
 
@@ -127,7 +171,16 @@ def publish_event(event: dict) -> CreatedEvent:
         raise ValueError("UBC_DISCOVERY_API_KEY is not configured")
 
     url = config.UBC_DISCOVERY_API_URL.rstrip("/") + "/events"
-    payload = _strip_nones(_build_payload(event))
+
+    event_picture_key: Optional[str] = None
+    image_url = event.get("image_url") or ""
+    if image_url.startswith("/api/images/"):
+        filename = image_url.removeprefix("/api/images/")
+        local_image = os.path.join(config.IMG_DIR, filename)
+        if os.path.isfile(local_image):
+            event_picture_key = _upload_image(local_image)
+
+    payload = _strip_nones(_build_payload(event, event_picture_key))
 
     log.info("Publishing event %s to UBC Discovery: %s", event["id"], event["title"])
 
