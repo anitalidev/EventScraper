@@ -53,6 +53,7 @@ class ExtractedEvent:
     dedupe_key: Optional[str] = None
     raw_ai_response: Optional[str] = None
     validation_errors: list[str] = field(default_factory=list)
+    image_url: Optional[str] = None
 
     # ── raw post that produced this event (not written to DB) ──────────────
     source_post: Optional[RawPost] = field(default=None, repr=False)

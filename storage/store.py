@@ -62,6 +62,7 @@ _MIGRATIONS = [
     "ALTER TABLE events ADD COLUMN approval_error TEXT",
     "ALTER TABLE events ADD COLUMN vibes TEXT",
     "ALTER TABLE events ADD COLUMN source_label TEXT",
+    "ALTER TABLE events ADD COLUMN image_url TEXT",
 ]
 
 
@@ -117,8 +118,8 @@ def save_events(events: list[ExtractedEvent]) -> dict[str, int]:
             """INSERT OR IGNORE INTO events
                (dedupe_key, status, confidence, confidence_reason, title, date, time,
                 location, description, source_url, organizer, vibes, is_event,
-                raw_ai_response, validation_errors, stored_at, source_label)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                raw_ai_response, validation_errors, stored_at, source_label, image_url)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 key,
                 ev.status,
@@ -137,6 +138,7 @@ def save_events(events: list[ExtractedEvent]) -> dict[str, int]:
                 json.dumps(ev.validation_errors),
                 now,
                 ev.source_label,
+                ev.image_url,
             ),
         )
         counts[ev.status] = counts.get(ev.status, 0) + 1
@@ -201,7 +203,7 @@ def get_event(event_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
-_EDITABLE_FIELDS = {"title", "date", "time", "location", "description", "vibes", "organizer"}
+_EDITABLE_FIELDS = {"title", "date", "time", "location", "description", "vibes", "organizer", "image_url"}
 
 
 def update_event(event_id: int, fields: dict) -> Optional[dict]:
