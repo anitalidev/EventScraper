@@ -6,8 +6,9 @@ import datetime as dt
 import hashlib
 import os
 import secrets
+import uuid
 
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 import config
 from integrations.ubc_discovery import (
@@ -171,6 +172,11 @@ def api_hub():
             "organizer": ev.get("club_name"),
             "description": ev.get("description"),
             "source_url": ev.get("source_url"),
+            "image_url": (
+                ev.get("event_picture_url") or ev.get("image_url") or
+                ev.get("banner_url") or ev.get("cover_image") or
+                ev.get("thumbnail_url") or ev.get("image") or ev.get("thumbnail")
+            ),
             "status": "published",
         })
 
@@ -276,6 +282,33 @@ def api_delete_event(event_id: int):
     if not deleted:
         return jsonify({"error": "Not found"}), 404
     return jsonify({"deleted": event_id})
+
+
+_IMAGES_DIR = os.path.join(os.path.dirname(__file__), "data", "images")
+_ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+
+
+@app.route("/api/events/<int:event_id>/image", methods=["POST"])
+def api_upload_event_image(event_id: int):
+    if get_event(event_id) is None:
+        return jsonify({"error": "Not found"}), 404
+    f = request.files.get("image")
+    if not f or not f.filename:
+        return jsonify({"error": "No image file provided"}), 400
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in _ALLOWED_IMAGE_EXTS:
+        return jsonify({"error": f"Unsupported file type: {ext}"}), 400
+    os.makedirs(_IMAGES_DIR, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}{ext}"
+    f.save(os.path.join(_IMAGES_DIR, filename))
+    image_url = f"/api/images/{filename}"
+    row = update_event(event_id, {"image_url": image_url})
+    return jsonify(row)
+
+
+@app.route("/api/images/<path:filename>")
+def api_serve_image(filename: str):
+    return send_from_directory(_IMAGES_DIR, filename)
 
 
 @app.route("/api/events/bulk", methods=["POST"])
