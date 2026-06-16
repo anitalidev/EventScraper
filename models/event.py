@@ -48,6 +48,7 @@ class ExtractedEvent:
     source_url: str
     organizer: str
     vibes: list[str]             # subset of UBC Discovery vibe taxonomy
+    source_label: str = "manual"  # e.g. "instagram", "Newsletter", "manual"
     status: str = "review"       # published | review | rejected
     dedupe_key: Optional[str] = None
     raw_ai_response: Optional[str] = None

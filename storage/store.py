@@ -117,8 +117,8 @@ def save_events(events: list[ExtractedEvent]) -> dict[str, int]:
             """INSERT OR IGNORE INTO events
                (dedupe_key, status, confidence, confidence_reason, title, date, time,
                 location, description, source_url, organizer, vibes, is_event,
-                raw_ai_response, validation_errors, stored_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                raw_ai_response, validation_errors, stored_at, source_label)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 key,
                 ev.status,
@@ -136,6 +136,7 @@ def save_events(events: list[ExtractedEvent]) -> dict[str, int]:
                 ev.raw_ai_response,
                 json.dumps(ev.validation_errors),
                 now,
+                ev.source_label,
             ),
         )
         counts[ev.status] = counts.get(ev.status, 0) + 1

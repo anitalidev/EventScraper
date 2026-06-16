@@ -87,6 +87,8 @@ def run(
 
     # ── 5. Validate ──────────────────────────────────────────────────────────
     validated = [validate(ev) for ev in all_extracted]
+    for ev in validated:
+        ev.source_label = "instagram"
     result["events_extracted"] = sum(1 for ev in validated if ev.is_event)
 
     # ── 6. Store events ──────────────────────────────────────────────────────
