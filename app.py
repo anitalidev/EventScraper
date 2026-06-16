@@ -1,10 +1,13 @@
 """
 Flask API server — thin layer that delegates everything to the pipeline.
 """
+import base64
 import datetime as dt
+import hashlib
 import os
+import secrets
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 import config
 from integrations.ubc_discovery import (
@@ -29,6 +32,45 @@ from storage.store import (
 )
 
 app = Flask(__name__)
+_secret_key_path = os.path.join(os.path.dirname(__file__), "data", ".flask_secret")
+os.makedirs(os.path.join(os.path.dirname(__file__), "data"), exist_ok=True)
+if os.path.exists(_secret_key_path):
+    with open(_secret_key_path, "rb") as _f:
+        _secret = _f.read()
+else:
+    _secret = os.urandom(32)
+    with open(_secret_key_path, "wb") as _f:
+        _f.write(_secret)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or _secret
+
+# ── Gmail OAuth helpers ─────────────────────────────────────────────────────
+
+_GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+_GMAIL_TOKEN_PATH = os.path.join(os.path.dirname(__file__), "data", "gmail_token.json")
+_GMAIL_VERIFIER_PATH = os.path.join(os.path.dirname(__file__), "data", ".gmail_verifier")
+_GMAIL_CREDENTIALS_PATH = os.path.join(os.path.dirname(__file__), "credentials.json")
+
+
+def _gmail_creds():
+    """Return valid Gmail credentials from the stored token, or None."""
+    try:
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+    except ImportError:
+        return None
+
+    if not os.path.exists(_GMAIL_TOKEN_PATH):
+        return None
+
+    creds = Credentials.from_authorized_user_file(_GMAIL_TOKEN_PATH, _GMAIL_SCOPES)
+    if creds and creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+            with open(_GMAIL_TOKEN_PATH, "w") as f:
+                f.write(creds.to_json())
+        except Exception:
+            return None
+    return creds if (creds and creds.valid) else None
 
 
 @app.route("/")
@@ -252,6 +294,167 @@ def api_bulk():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"updated": count})
+
+
+# ── Email Scraper routes ────────────────────────────────────────────────────
+
+@app.route("/email-scraper")
+def email_scraper():
+    return render_template("email_scraper.html")
+
+
+@app.route("/email-scraper/auth")
+def email_scraper_auth():
+    if not os.path.exists(_GMAIL_CREDENTIALS_PATH):
+        return "credentials.json not found. Download it from Google Cloud Console and place it in the EventScraper directory.", 400
+
+    try:
+        from google_auth_oauthlib.flow import Flow
+    except ImportError:
+        return "google-auth-oauthlib is not installed. Run: pip install google-auth-oauthlib", 500
+
+    flow = Flow.from_client_secrets_file(
+        _GMAIL_CREDENTIALS_PATH,
+        scopes=_GMAIL_SCOPES,
+        redirect_uri=url_for("email_scraper_callback", _external=True),
+    )
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+    os.makedirs(os.path.dirname(_GMAIL_VERIFIER_PATH), exist_ok=True)
+    with open(_GMAIL_VERIFIER_PATH, "w") as _vf:
+        _vf.write(code_verifier)
+    auth_url, state = flow.authorization_url(
+        access_type="offline", prompt="consent",
+        code_challenge=code_challenge, code_challenge_method="S256",
+    )
+    session["gmail_oauth_state"] = state
+    return redirect(auth_url)
+
+
+@app.route("/email-scraper/callback")
+def email_scraper_callback():
+    if not os.path.exists(_GMAIL_CREDENTIALS_PATH):
+        return "credentials.json not found.", 400
+
+    try:
+        from google_auth_oauthlib.flow import Flow
+    except ImportError:
+        return "google-auth-oauthlib is not installed.", 500
+
+    flow = Flow.from_client_secrets_file(
+        _GMAIL_CREDENTIALS_PATH,
+        scopes=_GMAIL_SCOPES,
+        state=session.get("gmail_oauth_state"),
+        redirect_uri=url_for("email_scraper_callback", _external=True),
+    )
+    code_verifier = None
+    if os.path.exists(_GMAIL_VERIFIER_PATH):
+        with open(_GMAIL_VERIFIER_PATH) as _vf:
+            code_verifier = _vf.read().strip()
+        os.remove(_GMAIL_VERIFIER_PATH)
+    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+    flow.fetch_token(
+        authorization_response=request.url,
+        code_verifier=code_verifier,
+    )
+    os.makedirs(os.path.dirname(_GMAIL_TOKEN_PATH), exist_ok=True)
+    with open(_GMAIL_TOKEN_PATH, "w") as f:
+        f.write(flow.credentials.to_json())
+    return redirect(url_for("email_scraper"))
+
+
+@app.route("/api/email-scraper/status")
+def api_email_scraper_status():
+    creds = _gmail_creds()
+    if not creds:
+        return jsonify({"connected": False})
+    try:
+        from googleapiclient.discovery import build
+        service = build("gmail", "v1", credentials=creds)
+        profile = service.users().getProfile(userId="me").execute()
+        return jsonify({"connected": True, "email": profile.get("emailAddress")})
+    except Exception as e:
+        return jsonify({"connected": False, "error": str(e)})
+
+
+@app.route("/api/email-scraper/disconnect", methods=["POST"])
+def api_email_scraper_disconnect():
+    if os.path.exists(_GMAIL_TOKEN_PATH):
+        os.remove(_GMAIL_TOKEN_PATH)
+    return jsonify({"disconnected": True})
+
+
+@app.route("/api/email-scraper/extract", methods=["POST"])
+def api_email_scraper_extract():
+    creds = _gmail_creds()
+    if not creds:
+        return jsonify({"error": "Not connected to Gmail"}), 401
+
+    body = request.get_json(force=True) or {}
+    api_key = body.get("api_key", "").strip()
+    if not api_key:
+        return jsonify({"error": "OpenAI API key is required"}), 400
+
+    max_results = min(int(body.get("max_results", 20)), 100)
+    q = body.get("q", "")
+    model = body.get("model", config.OPENAI_MODEL)
+    batch_size = int(body.get("batch_size", config.BATCH_SIZE))
+
+    try:
+        from googleapiclient.discovery import build
+        from scrapers.gmail import fetch_raw_posts
+        from pipeline.email_runner import run_email
+    except ImportError as e:
+        return jsonify({"error": f"Missing dependency: {e}"}), 500
+
+    service = build("gmail", "v1", credentials=creds)
+    raw_posts, fetch_errors = fetch_raw_posts(service, max_results=max_results, q=q)
+
+    result = run_email(raw_posts, api_key=api_key, model=model, batch_size=batch_size)
+    result["errors"] = fetch_errors + result.get("errors", [])
+    return jsonify(result)
+
+
+@app.route("/api/email-scraper/messages")
+def api_email_scraper_messages():
+    creds = _gmail_creds()
+    if not creds:
+        return jsonify({"error": "Not connected to Gmail"}), 401
+
+    try:
+        from googleapiclient.discovery import build
+    except ImportError:
+        return jsonify({"error": "google-api-python-client is not installed"}), 500
+
+    max_results = min(int(request.args.get("max_results", 20)), 100)
+    q = request.args.get("q", "")
+
+    service = build("gmail", "v1", credentials=creds)
+    list_params = {"userId": "me", "maxResults": max_results}
+    if q:
+        list_params["q"] = q
+
+    results = service.users().messages().list(**list_params).execute()
+    raw_messages = results.get("messages", [])
+
+    messages = []
+    for msg in raw_messages:
+        data = service.users().messages().get(
+            userId="me", id=msg["id"], format="metadata",
+            metadataHeaders=["Subject", "From", "Date"],
+        ).execute()
+        headers = {h["name"]: h["value"] for h in data["payload"].get("headers", [])}
+        messages.append({
+            "id":      msg["id"],
+            "subject": headers.get("Subject", "(No Subject)"),
+            "from":    headers.get("From", ""),
+            "date":    headers.get("Date", ""),
+            "snippet": data.get("snippet", ""),
+        })
+
+    return jsonify({"messages": messages})
 
 
 if __name__ == "__main__":

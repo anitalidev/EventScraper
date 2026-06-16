@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Email Scraper — Event Hub</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0d0d0d;
+    --surface:  #161616;
+    --surface2: #1f1f1f;
+    --border:   #272727;
+    --text:     #e0e0e0;
+    --muted:    #666;
+    --muted2:   #999;
+    --green:    #22c55e;
+    --green-bg: #052e16;
+    --red:      #ef4444;
+    --red-bg:   #1f0808;
+    --accent:   #4285f4;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* topbar */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(13,13,13,.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem;
+    height: 52px;
+    display: flex; align-items: center; gap: 1.5rem;
+  }
+  .topbar-brand {
+    font-size: 0.95rem; font-weight: 700;
+    background: linear-gradient(90deg, #e1306c, #d6249f);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    white-space: nowrap;
+  }
+  .topbar-nav { display: flex; gap: 0.1rem; }
+  .topbar-nav a { font-size: 0.82rem; color: var(--muted2); text-decoration: none; padding: 0.35rem 0.7rem; border-radius: 6px; transition: background .15s, color .15s; }
+  .topbar-nav a:hover { background: var(--surface2); color: var(--text); }
+  .topbar-nav a.active { background: var(--surface2); color: var(--text); }
+
+  .container { max-width: 860px; margin: 0 auto; padding: 2rem 1rem; }
+
+  h1 {
+    font-size: 1.65rem; font-weight: 700;
+    background: linear-gradient(90deg, #4285f4, #34a853);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .subtitle { color: var(--muted2); font-size: 0.88rem; margin: 0.3rem 0 2rem; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.4rem;
+    margin-bottom: 1.1rem;
+  }
+  .card-title {
+    font-size: 0.75rem; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.9rem; }
+  .field:last-child { margin-bottom: 0; }
+  label { font-size: 0.8rem; color: var(--muted2); }
+  input[type="number"], input[type="text"] {
+    background: #0f0f0f; border: 1px solid #303030;
+    border-radius: 8px; color: var(--text);
+    font-size: 0.93rem; padding: 0.55rem 0.8rem;
+    width: 100%; outline: none;
+    transition: border-color 0.15s; font-family: inherit;
+  }
+  input:focus { border-color: var(--accent); }
+
+  /* auth status */
+  .auth-status {
+    display: flex; align-items: center; gap: 0.7rem;
+    padding: 0.75rem 1rem; border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-size: 0.88rem;
+  }
+  .auth-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .auth-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .auth-dot.disconnected { background: var(--muted); }
+  .auth-label { flex: 1; color: var(--muted2); }
+  .auth-label strong { color: var(--text); }
+
+  .btn {
+    padding: 0.55rem 1.1rem; border: none; border-radius: 8px;
+    font-size: 0.88rem; font-weight: 600; cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s; display: inline-flex;
+    align-items: center; gap: 0.4rem;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-danger  { background: var(--red-bg); color: var(--red); border: 1px solid #4a1515; }
+  .btn-scan {
+    width: 100%; padding: 0.85rem;
+    background: linear-gradient(135deg, #4285f4, #34a853);
+    color: #fff; font-size: 1rem; font-weight: 600;
+    border: none; border-radius: 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .btn-scan:hover { opacity: 0.88; }
+  .btn-scan:active { transform: scale(0.99); }
+  .btn-scan:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #statusBar {
+    text-align: center; font-size: 0.86rem; color: var(--muted);
+    min-height: 1.3rem; margin: 0.7rem 0;
+  }
+  #statusBar.err { color: #f08080; }
+
+  /* results */
+  #results { display: none; }
+  #results h2 { font-size: 1rem; font-weight: 600; color: #ccc; margin-bottom: 0.9rem; }
+
+  .email-card {
+    background: #111; border: 1px solid #252525;
+    border-left: 3px solid #4285f4;
+    border-radius: 10px; padding: 1rem 1.2rem;
+    margin-bottom: 0.8rem;
+  }
+  .email-subject {
+    font-size: 0.97rem; font-weight: 600; color: #f0f0f0;
+    margin-bottom: 0.4rem;
+  }
+  .email-meta {
+    display: flex; flex-wrap: wrap; gap: 0.4rem 1rem;
+    font-size: 0.8rem; color: var(--muted2);
+  }
+  .email-snippet {
+    font-size: 0.84rem; color: #888; margin-top: 0.5rem;
+    line-height: 1.5; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  .spinner {
+    display: inline-block; width: 15px; height: 15px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box {
+    background: var(--red-bg); border: 1px solid #4a1515;
+    border-radius: 8px; padding: 0.7rem 0.9rem;
+    font-size: 0.82rem; color: #f08080; margin-bottom: 0.5rem;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.2rem; }
+  .chip {
+    font-size: 0.78rem; font-weight: 600;
+    padding: 0.28rem 0.75rem; border-radius: 999px; border: 1px solid;
+  }
+  .chip-blue      { color: #93c5fd; border-color: #1e3a5f; background: #0c1a2e; }
+  .chip-review    { color: #fbbf24; border-color: #78350f; background: #1c0a00; }
+  .chip-published { color: #4ade80; border-color: #166534; background: #052e16; }
+  .chip-rejected  { color: #f87171; border-color: #7f1d1d; background: #1f0a0a; }
+  .chip-duplicate { color: #94a3b8; border-color: #334155; background: #0f172a; }
+
+  /* event cards */
+  #results h2 { font-size: 1rem; font-weight: 600; color: #ccc; margin-bottom: 0.9rem; }
+  .event-card {
+    background: #111; border: 1px solid #252525;
+    border-left: 3px solid transparent;
+    border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 0.8rem;
+  }
+  .event-card.review    { border-left-color: #f59e0b; }
+  .event-card.published { border-left-color: #22c55e; }
+  .event-card.rejected  { border-left-color: #ef4444; opacity: 0.65; }
+  .event-header { display: flex; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.45rem; flex-wrap: wrap; }
+  .event-title  { font-size: 0.97rem; font-weight: 600; color: #f0f0f0; flex: 1; }
+  .badge { font-size: 0.7rem; font-weight: 600; padding: 0.18rem 0.55rem; border-radius: 999px; white-space: nowrap; }
+  .badge-status-review    { background: #1c1400; color: #fbbf24; }
+  .badge-status-published { background: #052e16; color: #4ade80; }
+  .badge-status-rejected  { background: #1f0a0a; color: #f87171; }
+  .event-meta { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+  .event-meta span { display: flex; align-items: center; gap: 0.25rem; }
+  .confidence-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; }
+  .confidence-bar-wrap { flex: 1; height: 4px; background: #252525; border-radius: 2px; overflow: hidden; }
+  .confidence-bar { height: 100%; border-radius: 2px; transition: width 0.4s; }
+  .conf-high   { background: #22c55e; }
+  .conf-medium { background: #f59e0b; }
+  .conf-low    { background: #ef4444; }
+  .confidence-label { font-size: 0.75rem; color: #666; white-space: nowrap; }
+  .reason-text  { font-size: 0.75rem; color: #555; margin-top: 0.25rem; font-style: italic; }
+  .event-link   { font-size: 0.8rem; margin-top: 0.5rem; }
+  .event-link a { color: var(--accent); text-decoration: none; }
+  .event-link a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="topbar-brand">Event Hub</span>
+  <nav class="topbar-nav">
+    <a href="/">Instagram Scraper</a>
+    <a href="/review">Review Queue</a>
+    <a href="/hub">The Hub <span style="font-size:0.68rem;font-weight:700;padding:0.15rem 0.45rem;border-radius:999px;background:#1a0a1a;color:#c084fc;border:1px solid #5b21b6;">alpha</span></a>
+    <a href="/email-scraper" class="active">Email Scraper</a>
+  </nav>
+</div>
+
+<div class="container">
+  <h1>Email Scraper</h1>
+  <p class="subtitle">Connect Gmail, scan your inbox for event emails, and extract events with AI.</p>
+
+  <!-- Gmail connection -->
+  <div class="card">
+    <div class="card-title">Gmail Connection</div>
+    <div class="auth-status" id="authStatus">
+      <div class="auth-dot disconnected" id="authDot"></div>
+      <span class="auth-label" id="authLabel">Checking…</span>
+      <button class="btn btn-primary" id="connectBtn" onclick="connectGmail()" style="display:none">Connect Gmail</button>
+      <button class="btn btn-danger"  id="disconnectBtn" onclick="disconnectGmail()" style="display:none">Disconnect</button>
+    </div>
+  </div>
+
+  <!-- Extraction settings -->
+  <div class="card">
+    <div class="card-title">Settings</div>
+    <div class="field">
+      <label for="apiKey">OpenAI API key</label>
+      <input type="password" id="apiKey" placeholder="sk-…" style="background:#0f0f0f;border:1px solid #303030;border-radius:8px;color:var(--text);font-size:0.93rem;padding:0.55rem 0.8rem;width:100%;outline:none;font-family:inherit;">
+    </div>
+    <div class="field">
+      <label for="model">Model</label>
+      <select id="model" style="background:#0f0f0f;border:1px solid #303030;border-radius:8px;color:var(--text);font-size:0.93rem;padding:0.55rem 0.8rem;width:100%;outline:none;font-family:inherit;">
+        <option value="gpt-4o-mini" selected>gpt-4o-mini (faster)</option>
+        <option value="gpt-4o">gpt-4o</option>
+        <option value="o4-mini">o4-mini (reasoning)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="maxResults">Max emails to scan</label>
+      <input type="number" id="maxResults" value="20" min="1" max="100">
+    </div>
+    <div class="field">
+      <label for="query">Gmail search query</label>
+      <input type="text" id="query" value="to:anita.ubccs+event@gmail.com" placeholder="e.g. subject:event OR subject:workshop">
+    </div>
+    <div class="field" style="display:flex;gap:1rem;">
+      <div style="flex:1;display:flex;flex-direction:column;gap:0.35rem;">
+        <label for="dateFrom">From date</label>
+        <input type="date" id="dateFrom" style="background:#0f0f0f;border:1px solid #303030;border-radius:8px;color:var(--text);font-size:0.93rem;padding:0.55rem 0.8rem;width:100%;outline:none;font-family:inherit;">
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:0.35rem;">
+        <label for="dateTo">To date</label>
+        <input type="date" id="dateTo" style="background:#0f0f0f;border:1px solid #303030;border-radius:8px;color:var(--text);font-size:0.93rem;padding:0.55rem 0.8rem;width:100%;outline:none;font-family:inherit;">
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-scan" id="scanBtn" onclick="runExtract()" disabled>
+    <span id="scanBtnText">Scan &amp; Extract Events</span>
+  </button>
+  <div id="statusBar"></div>
+
+  <div id="results">
+    <div class="chips" id="chips"></div>
+    <h2 id="resultsHeading"></h2>
+    <div id="emailList"></div>
+  </div>
+</div>
+
+<script>
+  const IC = {
+    person:   `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>`,
+    calendar: `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 1v4M11 1v4M2 7h12"/></svg>`,
+    mail:     `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 4l7 5 7-5"/></svg>`,
+  };
+
+  async function checkAuth() {
+    try {
+      const resp = await fetch('/api/email-scraper/status');
+      const data = await resp.json();
+      setAuthUI(data.connected, data.email);
+    } catch {
+      setAuthUI(false, null);
+    }
+  }
+
+  function setAuthUI(connected, email) {
+    const dot    = document.getElementById('authDot');
+    const label  = document.getElementById('authLabel');
+    const conn   = document.getElementById('connectBtn');
+    const disc   = document.getElementById('disconnectBtn');
+    const scanBtn = document.getElementById('scanBtn');
+
+    if (connected) {
+      dot.className = 'auth-dot connected';
+      label.innerHTML = `Connected as <strong>${esc(email || 'Gmail account')}</strong>`;
+      conn.style.display = 'none';
+      disc.style.display = '';
+      scanBtn.disabled = false;
+    } else {
+      dot.className = 'auth-dot disconnected';
+      label.innerHTML = 'Not connected';
+      conn.style.display = '';
+      disc.style.display = 'none';
+      scanBtn.disabled = true;
+    }
+  }
+
+  function connectGmail() {
+    window.location.href = '/email-scraper/auth';
+  }
+
+  async function disconnectGmail() {
+    await fetch('/api/email-scraper/disconnect', { method: 'POST' });
+    setAuthUI(false, null);
+    document.getElementById('results').style.display = 'none';
+  }
+
+  async function runExtract() {
+    const btn    = document.getElementById('scanBtn');
+    const btnTxt = document.getElementById('scanBtnText');
+    const apiKey   = document.getElementById('apiKey').value.trim();
+    const model    = document.getElementById('model').value;
+    const max      = parseInt(document.getElementById('maxResults').value) || 20;
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo   = document.getElementById('dateTo').value;
+
+    // Build Gmail query: base query + optional date filters (after:/before: use YYYY/MM/DD)
+    let query = document.getElementById('query').value.trim();
+    if (dateFrom) query += ` after:${dateFrom.replace(/-/g, '/')}`;
+    if (dateTo) {
+      const d = new Date(dateTo + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      const next = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+      query += ` before:${next}`;
+    }
+
+    if (!apiKey) { setStatus('Please enter your OpenAI API key.', true); return; }
+
+    btn.disabled = true;
+    btnTxt.innerHTML = '<span class="spinner"></span> Scanning & extracting…';
+    setStatus('Fetching emails and running AI extraction…');
+    document.getElementById('results').style.display = 'none';
+
+    try {
+      const resp = await fetch('/api/email-scraper/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey, model, max_results: max, q: query }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) { setStatus(data.error || 'Server error.', true); return; }
+      renderResults(data);
+    } catch (e) {
+      setStatus('Request failed: ' + e.message, true);
+    } finally {
+      btn.disabled = false;
+      btnTxt.textContent = 'Scan & Extract Events';
+    }
+  }
+
+  function renderResults(data) {
+    const events  = data.events  || [];
+    const counts  = data.storage_counts || {};
+    const errors  = data.errors  || [];
+
+    document.getElementById('chips').innerHTML = `
+      <span class="chip chip-blue">${IC.mail} ${data.posts_scraped} email${data.posts_scraped !== 1 ? 's' : ''} scanned</span>
+      ${counts.review    ? `<span class="chip chip-review">${counts.review} for review</span>`       : ''}
+      ${counts.published ? `<span class="chip chip-published">${counts.published} published</span>`  : ''}
+      ${counts.rejected  ? `<span class="chip chip-rejected">${counts.rejected} rejected</span>`     : ''}
+      ${counts.duplicate ? `<span class="chip chip-duplicate">${counts.duplicate} duplicates</span>` : ''}
+    `;
+
+    document.getElementById('resultsHeading').textContent =
+      events.length ? 'Extracted Events' : 'No events found in these emails.';
+
+    const list = document.getElementById('emailList');
+    list.innerHTML = '';
+
+    for (const ev of events) {
+      const conf = ev.confidence ?? 0;
+      const confClass = conf >= 0.85 ? 'conf-high' : conf >= 0.55 ? 'conf-medium' : 'conf-low';
+      const confPct   = Math.round(conf * 100);
+      const card = document.createElement('div');
+      card.className = `event-card ${ev.status}`;
+      card.innerHTML = `
+        <div class="event-header">
+          <div class="event-title">${esc(ev.title || '(Untitled)')}</div>
+          <span class="badge badge-status-${ev.status}">${ev.status}</span>
+        </div>
+        <div class="event-meta">
+          ${ev.organizer ? `<span>${IC.person} ${esc(ev.organizer)}</span>`  : ''}
+          ${ev.date      ? `<span>${IC.calendar} ${esc(ev.date)}</span>`     : ''}
+          ${ev.time      ? `<span>${IC.clock} ${esc(ev.time)}</span>`        : ''}
+          ${ev.location  ? `<span>${IC.pin} ${esc(ev.location)}</span>`      : ''}
+        </div>
+        ${ev.description ? `<div class="email-snippet">${esc(ev.description)}</div>` : ''}
+        <div class="confidence-row">
+          <div class="confidence-bar-wrap">
+            <div class="confidence-bar ${confClass}" style="width:${confPct}%"></div>
+          </div>
+          <span class="confidence-label">${confPct}% confidence</span>
+        </div>
+        ${ev.confidence_reason ? `<div class="reason-text">${esc(ev.confidence_reason)}</div>` : ''}
+        ${ev.source_url ? `<div class="event-link"><a href="${esc(ev.source_url)}" target="_blank" rel="noopener">${IC.mail} View email</a></div>` : ''}
+      `;
+      list.appendChild(card);
+    }
+
+    for (const e of errors) {
+      const b = document.createElement('div');
+      b.className = 'error-box';
+      b.textContent = typeof e === 'string' ? e : JSON.stringify(e);
+      list.appendChild(b);
+    }
+
+    setStatus(`Done — ${data.batches} batch${data.batches !== 1 ? 'es' : ''} processed, ${events.length} event${events.length !== 1 ? 's' : ''} extracted.`);
+    document.getElementById('results').style.display = 'block';
+  }
+
+  function setStatus(msg, isErr = false) {
+    const el = document.getElementById('statusBar');
+    el.textContent = msg;
+    el.className = isErr ? 'err' : '';
+  }
+
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  const localDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const today = new Date();
+  const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const monthAgo = new Date(todayLocal); monthAgo.setMonth(todayLocal.getMonth() - 1);
+  document.getElementById('dateTo').value   = localDate(todayLocal);
+  document.getElementById('dateFrom').value = localDate(monthAgo);
+
+  checkAuth();
+</script>
+</body>
+</html>
