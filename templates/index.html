@@ -182,7 +182,6 @@
   .conf-low    { background: #ef4444; }
   .confidence-label { font-size: 0.75rem; color: #666; white-space: nowrap; }
 
-  .reason-text { font-size: 0.75rem; color: #555; margin-top: 0.25rem; font-style: italic; }
   .event-link { font-size: 0.8rem; margin-top: 0.5rem; }
   .event-link a { color: #e1306c; text-decoration: none; }
   .event-link a:hover { text-decoration: underline; }
@@ -274,7 +273,7 @@ ubcams"></textarea>
       </div>
       <div class="field">
         <label for="batchSize">Batch size</label>
-        <input type="text" id="batchSize" value="8">
+        <input type="number" id="batchSize" value="8" min="1" max="50">
         <span class="hint">Posts per API call.</span>
       </div>
     </div>
@@ -455,7 +454,6 @@ ubcams"></textarea>
         </div>
         <span class="confidence-label">${confPct}% confidence</span>
       </div>
-      ${ev.confidence_reason ? `<div class="reason-text">${esc(ev.confidence_reason)}</div>` : ''}
       ${ev.source_url ? `<div class="event-link"><a href="${esc(ev.source_url)}" target="_blank" rel="noopener">${IC.link} View Instagram post</a></div>` : ''}
       ${valErrors ? `<div class="validation-errors">${IC.warning} ${esc(valErrors)}</div>` : ''}
     `;

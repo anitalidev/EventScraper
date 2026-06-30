@@ -553,7 +553,7 @@
     _toastTimer = setTimeout(() => { el.className = ''; }, 2800);
   }
 
-  const ALL_VIBES = ['social','career','academic','arts','culture','outdoors','sports','food','wellness','volunteering'];
+  const ALL_VIBES = {{ vibe_values | tojson }};
 
   function parseVibes(v) {
     try { return Array.isArray(v) ? v : JSON.parse(v || '[]'); } catch { return []; }

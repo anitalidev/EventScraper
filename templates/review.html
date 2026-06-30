@@ -110,7 +110,6 @@
   .conf-medium { background: var(--amber); }
   .conf-low    { background: var(--red); }
   .conf-label  { font-size: 0.72rem; color: var(--muted); }
-  .conf-reason { font-size: 0.72rem; color: var(--muted); font-style: italic; margin-left: 0.3rem; }
   .row-actions { display: flex; gap: 0.4rem; flex-shrink: 0; flex-direction: column; align-items: flex-end; }
   .action-btn { font-size: 0.75rem; font-weight: 600; padding: 0.3rem 0.7rem; border-radius: 6px; border: 1px solid; cursor: pointer; white-space: nowrap; transition: opacity .15s; background: transparent; display: flex; align-items: center; gap: 0.3rem; }
   .action-btn:hover { opacity: 0.75; }
@@ -410,7 +409,6 @@
         <div class="conf-row">
           <div class="conf-bar-wrap"><div class="conf-bar ${confCls}" style="width:${confPct}%"></div></div>
           <span class="conf-label">${confPct}% confidence</span>
-          ${ev.confidence_reason ? `<span class="conf-reason">— ${esc(ev.confidence_reason)}</span>` : ''}
         </div>
         ${vibeHtml(ev.vibes)}
         ${ev.source_url ? `<a class="ig-link" href="${esc(ev.source_url)}" target="_blank" rel="noopener">${IC.link} View post</a>` : ''}
@@ -607,7 +605,7 @@
     return `<div class="vibe-tags">${tags.map(v => `<span class="vibe-tag">${esc(v)}</span>`).join('')}</div>`;
   }
 
-  const ALL_VIBES = ['social','career','academic','arts','culture','outdoors','sports','food','wellness','volunteering'];
+  const ALL_VIBES = {{ vibe_values | tojson }};
 
   function parseVibes(v) {
     try { return Array.isArray(v) ? v : JSON.parse(v || '[]'); } catch { return []; }

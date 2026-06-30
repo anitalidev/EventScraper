@@ -6,7 +6,22 @@ scraper that produces RawPost objects — everything downstream is source-agnost
 from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field, asdict
-from typing import Optional
+from typing import Literal, Optional, TypeAlias, cast, get_args
+
+
+Vibe: TypeAlias = Literal[
+    "social",
+    "career",
+    "academic",
+    "arts",
+    "culture",
+    "outdoors",
+    "sports",
+    "food",
+    "wellness",
+    "volunteering",
+]
+VIBE_VALUES = cast(tuple[Vibe, ...], get_args(Vibe))
 
 
 @dataclass
@@ -39,7 +54,6 @@ class ExtractedEvent:
     """
     is_event: bool
     confidence: float            # 0.0 – 1.0
-    confidence_reason: str
     title: str
     date: Optional[str]          # YYYY-MM-DD or None
     time: Optional[str]          # HH:MM (24 h) or None
@@ -47,7 +61,7 @@ class ExtractedEvent:
     description: str
     source_url: str
     organizer: str
-    vibes: list[str]             # subset of UBC Discovery vibe taxonomy
+    vibes: list[Vibe]            # subset of UBC Discovery vibe taxonomy
     source_label: str = "manual"  # e.g. "instagram", "Newsletter", "manual"
     status: str = "review"       # published | review | rejected
     dedupe_key: Optional[str] = None

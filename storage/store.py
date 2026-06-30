@@ -36,7 +36,6 @@ CREATE TABLE IF NOT EXISTS events (
     dedupe_key              TEXT UNIQUE,
     status                  TEXT NOT NULL DEFAULT 'review',
     confidence              REAL,
-    confidence_reason       TEXT,
     title                   TEXT NOT NULL,
     date                    TEXT,
     time                    TEXT,
@@ -116,15 +115,14 @@ def save_events(events: list[ExtractedEvent]) -> dict[str, int]:
 
         conn.execute(
             """INSERT OR IGNORE INTO events
-               (dedupe_key, status, confidence, confidence_reason, title, date, time,
+               (dedupe_key, status, confidence, title, date, time,
                 location, description, source_url, organizer, vibes, is_event,
                 raw_ai_response, validation_errors, stored_at, source_label, image_url)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 key,
                 ev.status,
                 ev.confidence,
-                ev.confidence_reason,
                 ev.title,
                 ev.date,
                 ev.time,
