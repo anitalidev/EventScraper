@@ -109,14 +109,14 @@ def run(
     result["events_extracted"] = sum(1 for ev in validated if ev.is_event)
 
     # ── 5b. Generate thumbnails for accepted Instagram events ─────────────────
-    for ev in validated:
-        if ev.is_event and ev.source_post and ev.source_post.image_path:
-            ev.image_url = generate_thumbnail(
-                ev.source_post.image_path,
-                ev.title,
-                api_key=api_key,
-                model=model,
-            )
+    # for ev in validated:
+    #     if ev.is_event and ev.source_post and ev.source_post.image_path:
+    #         ev.image_url = generate_thumbnail(
+    #             ev.source_post.image_path,
+    #             ev.title,
+    #             api_key=api_key,
+    #             model=model,
+    #         )
 
     # ── 6. Store events ──────────────────────────────────────────────────────
     counts = store.save_events(validated)
