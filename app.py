@@ -17,6 +17,7 @@ from integrations.ubc_discovery import (
     list_events as ubc_list_events,
     publish_event,
 )
+from models.event import VIBE_VALUES
 from pipeline.runner import run
 from storage.store import (
     bulk_delete,
@@ -101,8 +102,18 @@ def scrape():
     if not api_key:
         return jsonify({"error": "OpenAI API key is required"}), 400
 
-    model      = body.get("model") or config.OPENAI_MODEL
-    batch_size = int(body.get("batch_size") or config.BATCH_SIZE)
+    model = body.get("model") or config.OPENAI_MODEL
+    raw_batch_size = body.get("batch_size", config.BATCH_SIZE)
+    if raw_batch_size in (None, ""):
+        raw_batch_size = config.BATCH_SIZE
+    try:
+        batch_size = int(raw_batch_size)
+    except (TypeError, ValueError):
+        return jsonify({"error": "batch_size must be an integer"}), 400
+    if not 1 <= batch_size <= config.BATCH_MAX_SIZE:
+        return jsonify({
+            "error": f"batch_size must be between 1 and {config.BATCH_MAX_SIZE}"
+        }), 400
     ocr_on     = body.get("ocr_enabled", config.OCR_ENABLED)
     if isinstance(ocr_on, str):
         ocr_on = ocr_on.lower() == "true"
@@ -130,12 +141,12 @@ def events():
 
 @app.route("/review")
 def review():
-    return render_template("review.html")
+    return render_template("review.html", vibe_values=VIBE_VALUES)
 
 
 @app.route("/hub")
 def hub():
-    return render_template("hub.html")
+    return render_template("hub.html", vibe_values=VIBE_VALUES)
 
 
 @app.route("/api/hub")
@@ -430,10 +441,25 @@ def api_email_scraper_extract():
     if not api_key:
         return jsonify({"error": "OpenAI API key is required"}), 400
 
-    max_results = min(int(body.get("max_results", 20)), 100)
+    try:
+        max_results = int(body.get("max_results", 20))
+        raw_batch_size = body.get("batch_size", config.BATCH_SIZE)
+        if raw_batch_size in (None, ""):
+            raw_batch_size = config.BATCH_SIZE
+        batch_size = int(raw_batch_size)
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "max_results and batch_size must be integers"
+        }), 400
+    if not 1 <= max_results <= 100:
+        return jsonify({"error": "max_results must be between 1 and 100"}), 400
+    if not 1 <= batch_size <= config.BATCH_MAX_SIZE:
+        return jsonify({
+            "error": f"batch_size must be between 1 and {config.BATCH_MAX_SIZE}"
+        }), 400
+
     q = body.get("q", "")
     model = body.get("model", config.OPENAI_MODEL)
-    batch_size = int(body.get("batch_size", config.BATCH_SIZE))
 
     try:
         from googleapiclient.discovery import build

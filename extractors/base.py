@@ -9,6 +9,10 @@ from abc import ABC, abstractmethod
 from models.event import RawPost, ExtractedEvent
 
 
+class ExtractionUnavailableError(RuntimeError):
+    """A request-wide failure that cannot be fixed by splitting the input."""
+
+
 class BaseExtractor(ABC):
 
     @abstractmethod

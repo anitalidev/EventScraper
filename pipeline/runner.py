@@ -11,21 +11,22 @@ Stages (in order):
 """
 from __future__ import annotations
 from datetime import date
-from typing import Optional
 
 import config
-from extractors.base import BaseExtractor
+from extractors.base import BaseExtractor, ExtractionUnavailableError
 from extractors.openai_extractor import OpenAIExtractor
 from extractors.thumbnail_extractor import generate_thumbnail
 from models.event import ExtractedEvent, RawPost
 from ocr import processor as ocr
+from pipeline.batching import extract_with_bisection, iter_bounded_batches
 from scrapers.instagram import scrape_channels
 from storage import store
 from validation.validator import validate
 
 
-def _chunk(lst: list, size: int) -> list[list]:
-    return [lst[i : i + size] for i in range(0, len(lst), size)]
+def _input_size(post: RawPost) -> int:
+    # Include a small allowance for JSON keys and metadata.
+    return len(post.combined_text()) + len(post.taken_at) + 96
 
 
 def run(
@@ -74,16 +75,25 @@ def run(
     extractor: BaseExtractor = OpenAIExtractor(api_key=api_key, model=model)
     all_extracted: list[ExtractedEvent] = []
 
-    for batch in _chunk(raw_posts, batch_size):
-        result["batches"] += 1
-        try:
-            extracted = extractor.extract_batch(batch)
-            all_extracted.extend(extracted)
-        except Exception as e:
+    for batch in iter_bounded_batches(
+        raw_posts,
+        max_items=batch_size,
+        max_chars=config.BATCH_MAX_INPUT_CHARS,
+        size_of=_input_size,
+    ):
+        extracted, failures, calls = extract_with_bisection(
+            batch,
+            extractor.extract_batch,
+            should_split=lambda error: not isinstance(
+                error, ExtractionUnavailableError
+            ),
+        )
+        result["batches"] += calls
+        all_extracted.extend(extracted)
+        for failure in failures:
             result["errors"].append({
-                "batch": result["batches"],
-                "error": str(e),
-                "posts": [p.post_url for p in batch],
+                "error": str(failure.error),
+                "posts": [p.post_url for p in failure.items],
             })
 
     # ── 5. Validate ──────────────────────────────────────────────────────────

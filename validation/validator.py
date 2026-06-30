@@ -7,7 +7,8 @@ than silently passed through.
 """
 from __future__ import annotations
 import re
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import config
 from models.event import ExtractedEvent, VIBE_VALUES
@@ -17,7 +18,11 @@ _TIME_RE = re.compile(r"^\d{2}:\d{2}$")
 _URL_RE  = re.compile(r"^https?://")
 
 
-def validate(ev: ExtractedEvent) -> ExtractedEvent:
+def validate(
+    ev: ExtractedEvent,
+    *,
+    current_date: date | None = None,
+) -> ExtractedEvent:
     """
     Validate *ev* in-place.  Appends human-readable strings to
     ev.validation_errors and updates ev.status accordingly.
@@ -37,9 +42,15 @@ def validate(ev: ExtractedEvent) -> ExtractedEvent:
             errors.append(f"date is not ISO YYYY-MM-DD: {ev.date!r}")
         else:
             try:
-                date.fromisoformat(ev.date)
+                event_date = date.fromisoformat(ev.date)
             except ValueError:
                 errors.append(f"date is not a real calendar date: {ev.date!r}")
+            else:
+                today = current_date or datetime.now(
+                    ZoneInfo(config.APP_TIMEZONE)
+                ).date()
+                if event_date < today:
+                    errors.append(f"event date is in the past: {ev.date}")
 
     if ev.time is not None and not _TIME_RE.match(ev.time):
         errors.append(f"time is not HH:MM: {ev.time!r}")

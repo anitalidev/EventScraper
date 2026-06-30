@@ -12,7 +12,13 @@ OPENAI_MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4o")
 
 # ── Pipeline ────────────────────────────────────────────────────────────────
 BATCH_SIZE: int = int(os.environ.get("BATCH_SIZE", "8"))
+BATCH_MAX_SIZE: int = int(os.environ.get("BATCH_MAX_SIZE", "50"))
+# Conservative, model-independent proxy for input tokens (usually ~4 chars/token).
+BATCH_MAX_INPUT_CHARS: int = int(
+    os.environ.get("BATCH_MAX_INPUT_CHARS", "60000")
+)
 OCR_ENABLED: bool = os.environ.get("OCR_ENABLED", "true").lower() == "true"
+APP_TIMEZONE: str = os.environ.get("APP_TIMEZONE", "America/Vancouver")
 
 # ── Confidence thresholds ───────────────────────────────────────────────────
 CONFIDENCE_PUBLISH: float = 0.85  # auto-publish above this
