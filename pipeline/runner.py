@@ -10,12 +10,12 @@ Stages (in order):
   6. Store   — persist validated events with deduplication
 """
 from __future__ import annotations
+import os
 from datetime import date
 
 import config
 from extractors.base import BaseExtractor, ExtractionUnavailableError
 from extractors.openai_extractor import OpenAIExtractor
-from extractors.thumbnail_extractor import generate_thumbnail
 from models.event import ExtractedEvent, RawPost
 from ocr import processor as ocr
 from pipeline.batching import extract_with_bisection, iter_bounded_batches
@@ -108,15 +108,12 @@ def run(
         ev.source_label = "instagram"
     result["events_extracted"] = sum(1 for ev in validated if ev.is_event)
 
-    # ── 5b. Generate thumbnails for accepted Instagram events ─────────────────
-    # for ev in validated:
-    #     if ev.is_event and ev.source_post and ev.source_post.image_path:
-    #         ev.image_url = generate_thumbnail(
-    #             ev.source_post.image_path,
-    #             ev.title,
-    #             api_key=api_key,
-    #             model=model,
-    #         )
+    # ── 5b. Use the raw post image when thumbnail generation is disabled ─────
+    for ev in validated:
+        if ev.is_event and not ev.image_url and ev.source_post:
+            image_path = ev.source_post.image_path
+            if image_path:
+                ev.image_url = f"/api/images/{os.path.basename(image_path)}"
 
     # ── 6. Store events ──────────────────────────────────────────────────────
     counts = store.save_events(validated)

@@ -6,14 +6,17 @@ Mirrors pipeline/runner.py but skips the Instagram scraping and OCR steps.
 from __future__ import annotations
 
 import config
+from extractors.base import ExtractionUnavailableError
 from extractors.email_extractor import EmailExtractor
 from models.event import RawPost
+from pipeline.batching import extract_with_bisection, iter_bounded_batches
 from storage import store
 from validation.validator import validate
 
 
-def _chunk(lst: list, size: int) -> list[list]:
-    return [lst[i : i + size] for i in range(0, len(lst), size)]
+def _input_size(post: RawPost) -> int:
+    # Include a small allowance for JSON keys and metadata.
+    return len(post.caption) + len(post.taken_at) + 96
 
 
 def run_email(
@@ -45,16 +48,25 @@ def run_email(
     extractor = EmailExtractor(api_key=api_key, model=model)
 
     all_extracted = []
-    for batch in _chunk(raw_posts, batch_size):
-        result["batches"] += 1
-        try:
-            extracted = extractor.extract_batch(batch)
-            all_extracted.extend(extracted)
-        except Exception as e:
+    for batch in iter_bounded_batches(
+        raw_posts,
+        max_items=batch_size,
+        max_chars=config.BATCH_MAX_INPUT_CHARS,
+        size_of=_input_size,
+    ):
+        extracted, failures, calls = extract_with_bisection(
+            batch,
+            extractor.extract_batch,
+            should_split=lambda error: not isinstance(
+                error, ExtractionUnavailableError
+            ),
+        )
+        result["batches"] += calls
+        all_extracted.extend(extracted)
+        for failure in failures:
             result["errors"].append({
-                "batch": result["batches"],
-                "error": str(e),
-                "posts": [p.post_url for p in batch],
+                "error": str(failure.error),
+                "posts": [p.post_url for p in failure.items],
             })
 
     validated = [validate(ev) for ev in all_extracted]

@@ -6,7 +6,6 @@ Returns RawPost objects; image downloading is handled here so CDN URLs
 (which expire) are captured immediately.
 """
 from __future__ import annotations
-import hashlib
 import html
 import json
 import os
@@ -37,7 +36,7 @@ def _img_url(item: dict) -> Optional[str]:
     return candidates[0].get("url") if candidates else None
 
 
-def _download_image(url: str, username: str) -> Optional[str]:
+def _download_image(url: str, username: str, post_id: str) -> Optional[str]:
     if not url:
         return None
     os.makedirs(config.IMG_DIR, exist_ok=True)
@@ -45,7 +44,9 @@ def _download_image(url: str, username: str) -> Optional[str]:
         ext = os.path.splitext(urllib.parse.urlparse(url).path)[1].split("?")[0].lower()
         if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
             ext = ".jpg"
-        fname = f"ig_{username}_{hashlib.sha1(url.encode()).hexdigest()[:12]}{ext}"
+        safe_username = re.sub(r"[^A-Za-z0-9_.-]", "_", username)
+        safe_post_id = re.sub(r"[^A-Za-z0-9_.-]", "_", post_id)
+        fname = f"ig_{safe_username}_{safe_post_id}{ext}"
         path = os.path.join(config.IMG_DIR, fname)
         if not os.path.exists(path):
             req = urllib.request.Request(url, headers={
@@ -138,7 +139,11 @@ def fetch_posts(
 
             caption = _clean((item.get("caption") or {}).get("text") or "")
             img_url = _img_url(item)
-            image_path = _download_image(img_url, username) if download_images and img_url else None
+            image_path = (
+                _download_image(img_url, username, str(post_id))
+                if download_images and img_url
+                else None
+            )
 
             posts.append(RawPost(
                 source="instagram",

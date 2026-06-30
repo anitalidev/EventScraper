@@ -96,6 +96,23 @@ def save_raw_posts(posts: list[RawPost]) -> None:
     conn.close()
 
 
+def find_raw_post_image(post_url: str, username: str) -> Optional[str]:
+    """Return the newest downloaded image for an Instagram post, if available."""
+    if not post_url or not username:
+        return None
+    conn = _connect()
+    row = conn.execute(
+        """SELECT image_path
+           FROM raw_posts
+           WHERE post_url = ? AND username = ? AND image_path IS NOT NULL
+           ORDER BY stored_at DESC
+           LIMIT 1""",
+        (post_url, username),
+    ).fetchone()
+    conn.close()
+    return row["image_path"] if row else None
+
+
 def save_events(events: list[ExtractedEvent]) -> dict[str, int]:
     """
     Upsert events by dedupe_key.  Returns counts by status.
