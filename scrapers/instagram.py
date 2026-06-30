@@ -30,16 +30,6 @@ def username_from_input(raw: str) -> str:
     return raw.lstrip("@")
 
 
-def _api_request(url: str) -> dict:
-    req = urllib.request.Request(url, headers={
-        "User-Agent": config.UA,
-        "Accept": "application/json",
-        "X-IG-App-ID": config.IG_APP_ID,
-    })
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
-
-
 def _img_url(item: dict) -> Optional[str]:
     if item.get("carousel_media"):
         item = item["carousel_media"][0]
@@ -203,6 +193,6 @@ def scrape_channels(
             errors.append({"username": username, "error": err})
         else:
             all_posts.extend(posts)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     return all_posts, errors
