@@ -19,6 +19,8 @@ BATCH_MAX_INPUT_CHARS: int = int(
 )
 OCR_ENABLED: bool = os.environ.get("OCR_ENABLED", "true").lower() == "true"
 APP_TIMEZONE: str = os.environ.get("APP_TIMEZONE", "America/Vancouver")
+# B.C. Pacific time is permanently UTC-7 as of March 8, 2026.
+APP_UTC_OFFSET_HOURS: int = int(os.environ.get("APP_UTC_OFFSET_HOURS", "-7"))
 
 # ── Confidence thresholds ───────────────────────────────────────────────────
 CONFIDENCE_PUBLISH: float = 0.85  # auto-publish above this
@@ -42,11 +44,6 @@ UA: str = (
 # ── UBC Discovery integration ───────────────────────────────────────────────
 UBC_DISCOVERY_API_URL: str = os.environ.get("UBC_DISCOVERY_API_URL", "")
 UBC_DISCOVERY_API_KEY: str = os.environ.get("UBC_DISCOVERY_API_KEY", "")
-
-# ── AWS / S3 (for uploading event images on publish) ────────────────────────
-AWS_REGION: str = os.environ.get("AWS_REGION", "us-west-2")
-S3_BUCKET_NAME: str = os.environ.get("S3_BUCKET_NAME", "")
-S3_ENDPOINT_URL: str = os.environ.get("S3_ENDPOINT_URL", "")
 
 EVENT_TYPES = [
     "Workshop",

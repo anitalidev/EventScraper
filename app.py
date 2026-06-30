@@ -306,7 +306,7 @@ def api_delete_event(event_id: int):
     return jsonify({"deleted": event_id})
 
 
-_IMAGES_DIR = os.path.join(os.path.dirname(__file__), "data", "images")
+_IMAGES_DIR = config.IMG_DIR
 _ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 

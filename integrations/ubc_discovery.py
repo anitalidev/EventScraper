@@ -10,56 +10,93 @@ import json
 import logging
 import mimetypes
 import os
-import uuid
+from io import BytesIO
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from functools import lru_cache
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-import boto3
 import requests
-from botocore.config import Config
+from PIL import Image
 
 import config
+from storage.store import find_raw_post_image
 
 log = logging.getLogger(__name__)
 
 
-@lru_cache(maxsize=1)
-def _s3_client():
-    return boto3.client(
-        "s3",
-        region_name=config.AWS_REGION,
-        endpoint_url=config.S3_ENDPOINT_URL or None,
-        config=Config(signature_version="s3v4"),
+def _upload_image(event_id: str, local_path: str) -> bool:
+    """Upload an event image through the UBC Discovery presigned POST flow."""
+    headers = {"Authorization": f"Api-Key {config.UBC_DISCOVERY_API_KEY}"}
+    presign_url = (
+        config.UBC_DISCOVERY_API_URL.rstrip("/")
+        + f"/events/{event_id}/presigned-upload"
     )
 
-
-def _upload_image(local_path: str) -> Optional[str]:
-    """Upload a local image file to S3 and return the object key, or None on failure."""
-    if not config.S3_BUCKET_NAME:
-        log.warning("S3_BUCKET_NAME not configured — skipping image upload")
-        return None
-
-    ext = os.path.splitext(local_path)[1] or ".jpg"
-    key = f"event-images/{uuid.uuid4()}{ext}"
-    content_type = mimetypes.guess_type(local_path)[0] or "image/jpeg"
-
     try:
-        with open(local_path, "rb") as f:
-            _s3_client().put_object(
-                Bucket=config.S3_BUCKET_NAME,
-                Key=key,
-                Body=f,
-                ContentType=content_type,
+        presign_resp = requests.post(
+            presign_url,
+            headers=headers,
+            timeout=15,
+        )
+        if not presign_resp.ok:
+            raise UBCDiscoveryError(
+                status_code=presign_resp.status_code,
+                body=presign_resp.text,
             )
-        log.info("Uploaded event image to S3: %s", key)
-        os.remove(local_path)
-        log.info("Deleted local image: %s", local_path)
-        return key
+
+        upload = presign_resp.json()
+        content_type = upload["fields"].get(
+            "Content-Type",
+            mimetypes.guess_type(local_path)[0] or "image/jpeg",
+        )
+        image, filename = _prepare_image(local_path, content_type)
+        max_size = upload["max_file_size_bytes"]
+        file_size = image.getbuffer().nbytes
+        if file_size > max_size:
+            log.warning(
+                "Event image %s is too large for UBC Discovery (%d > %d bytes)",
+                local_path,
+                file_size,
+                max_size,
+            )
+            return False
+
+        upload_resp = requests.post(
+            upload["upload_url"],
+            data=upload["fields"],
+            files={"file": (filename, image, content_type)},
+            timeout=30,
+        )
+        upload_resp.raise_for_status()
+        log.info(
+            "Uploaded event image for UBC Discovery event %s: %s",
+            event_id,
+            upload["file_key"],
+        )
+        return True
     except Exception as e:
-        log.warning("Failed to upload image %s to S3: %s", local_path, e)
-        return None
+        log.warning(
+            "Failed to upload image %s for UBC Discovery event %s: %s",
+            local_path,
+            event_id,
+            e,
+        )
+        return False
+
+
+def _prepare_image(local_path: str, content_type: str) -> tuple[BytesIO, str]:
+    """Return image bytes matching the content type required by the presigned POST."""
+    output = BytesIO()
+    if content_type == "image/webp":
+        with Image.open(local_path) as source:
+            source.save(output, format="WEBP")
+        filename = os.path.splitext(os.path.basename(local_path))[0] + ".webp"
+    else:
+        with open(local_path, "rb") as source:
+            output.write(source.read())
+        filename = os.path.basename(local_path)
+    output.seek(0)
+    return output, filename
 
 
 class UBCDiscoveryError(Exception):
@@ -85,14 +122,16 @@ class CreatedEvent:
 
 
 def _combine_datetime(date_str: Optional[str], time_str: Optional[str]) -> Optional[str]:
-    """Combine YYYY-MM-DD + HH:MM into a UTC ISO-8601 datetime string."""
+    """Interpret an event's local date/time and return a UTC ISO-8601 string."""
     if not date_str:
         return None
     dt_str = f"{date_str}T{time_str}:00" if time_str else f"{date_str}T00:00:00"
-    return datetime.fromisoformat(dt_str).replace(tzinfo=timezone.utc).isoformat()
+    local_timezone = timezone(timedelta(hours=config.APP_UTC_OFFSET_HOURS))
+    local_datetime = datetime.fromisoformat(dt_str).replace(tzinfo=local_timezone)
+    return local_datetime.astimezone(timezone.utc).isoformat()
 
 
-def _build_payload(event: dict, event_picture_key: Optional[str] = None) -> dict:
+def _build_payload(event: dict) -> dict:
     """Map an EventScraper event dict to the UBC Discovery CreateEventRequest body."""
     return {
         "title":             event["title"],
@@ -104,13 +143,26 @@ def _build_payload(event: dict, event_picture_key: Optional[str] = None) -> dict
         "vibes":             json.loads(event.get("vibes") or "[]"),
         "location_name":     event.get("location"),
         "event_date":        _combine_datetime(event.get("date"), event.get("time")),
-        "external_ref":      str(event["id"]),  # idempotency key (requires UBC Discovery change)
-        "event_picture_key": event_picture_key,
     }
 
 
 def _strip_nones(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None}
+
+
+def _local_image_path(event: dict) -> Optional[str]:
+    image_url = event.get("image_url") or ""
+    if image_url.startswith("/api/images/"):
+        filename = os.path.basename(image_url.removeprefix("/api/images/"))
+        local_image = os.path.join(config.IMG_DIR, filename)
+        if os.path.isfile(local_image):
+            return local_image
+
+    raw_image = find_raw_post_image(
+        post_url=event.get("source_url") or "",
+        username=event.get("organizer") or "",
+    )
+    return raw_image if raw_image and os.path.isfile(raw_image) else None
 
 
 def list_events(page_size: int = 20) -> list[dict]:
@@ -172,15 +224,8 @@ def publish_event(event: dict) -> CreatedEvent:
 
     url = config.UBC_DISCOVERY_API_URL.rstrip("/") + "/events"
 
-    event_picture_key: Optional[str] = None
-    image_url = event.get("image_url") or ""
-    if image_url.startswith("/api/images/"):
-        filename = image_url.removeprefix("/api/images/")
-        local_image = os.path.join(config.IMG_DIR, filename)
-        if os.path.isfile(local_image):
-            event_picture_key = _upload_image(local_image)
-
-    payload = _strip_nones(_build_payload(event, event_picture_key))
+    local_image = _local_image_path(event)
+    payload = _strip_nones(_build_payload(event))
 
     log.info("Publishing event %s to UBC Discovery: %s", event["id"], event["title"])
 
@@ -204,6 +249,9 @@ def publish_event(event: dict) -> CreatedEvent:
 
     data = resp.json()
     log.info("UBC Discovery created event id=%s for EventScraper id=%s", data["id"], event["id"])
+    if local_image:
+        _upload_image(data["id"], local_image)
+
     return CreatedEvent(
         ubc_event_id=data["id"],
         title=data["title"],
