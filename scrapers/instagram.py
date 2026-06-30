@@ -86,15 +86,19 @@ def fetch_posts(
     start_date: date,
     end_date: date,
     download_images: bool = True,
+    post_limit: int = config.IG_POST_COUNT,
 ) -> tuple[list[RawPost], Optional[str]]:
     """
     Fetch posts for *username* whose taken_at falls in [start_date, end_date].
     Paginates using next_max_id until all posts in the date range are collected
-    or there are no more pages. Returns (posts, error_message).
+    or *post_limit* posts have been inspected. Returns (posts, error_message).
     """
+    if post_limit < 1:
+        raise ValueError("post_limit must be at least 1")
+
     base_url = (
         f"https://www.instagram.com/api/v1/feed/user/"
-        f"{urllib.parse.quote(username)}/username/?count=12&__a=1&__d=dis"
+        f"{urllib.parse.quote(username)}/username/?__a=1&__d=dis"
     )
     headers = {
         "User-Agent": config.UA,
@@ -106,9 +110,13 @@ def fetch_posts(
     posts: list[RawPost] = []
     next_max_id: Optional[str] = None
     seen: set[str] = set()
+    inspected = 0
 
-    while True:
-        url = base_url + (f"&max_id={urllib.parse.quote(next_max_id)}" if next_max_id else "")
+    while inspected < post_limit:
+        request_count = min(config.IG_PAGE_SIZE, post_limit - inspected)
+        url = f"{base_url}&count={request_count}"
+        if next_max_id:
+            url += f"&max_id={urllib.parse.quote(next_max_id)}"
         req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
@@ -116,12 +124,13 @@ def fetch_posts(
         except Exception as e:
             return posts, str(e)
 
-        items = data.get("items") or []
+        items = (data.get("items") or [])[:request_count]
         if not items:
             break
 
         oldest_in_page: Optional[date] = None
         for item in items:
+            inspected += 1
             taken = item.get("taken_at") or 0
             post_dt = datetime.fromtimestamp(taken, tz=timezone.utc)
             post_date = post_dt.date()
@@ -153,6 +162,8 @@ def fetch_posts(
         # Stop paginating once we've gone past the start of the date range
         if oldest_in_page and oldest_in_page < start_date:
             break
+        if inspected >= post_limit:
+            break
 
         next_max_id = data.get("next_max_id")
         if not next_max_id or not data.get("more_available"):
@@ -168,6 +179,7 @@ def scrape_channels(
     start_date: date,
     end_date: date,
     download_images: bool = True,
+    post_limit: int = config.IG_POST_COUNT,
 ) -> tuple[list[RawPost], list[dict]]:
     """
     Scrape all channels and return (raw_posts, errors).
@@ -180,7 +192,13 @@ def scrape_channels(
         username = username_from_input(raw)
         if not username:
             continue
-        posts, err = fetch_posts(username, start_date, end_date, download_images)
+        posts, err = fetch_posts(
+            username,
+            start_date,
+            end_date,
+            download_images,
+            post_limit,
+        )
         if err:
             errors.append({"username": username, "error": err})
         else:

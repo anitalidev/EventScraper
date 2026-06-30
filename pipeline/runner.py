@@ -35,6 +35,7 @@ def run(
     end_date: date,
     api_key: str,
     *,
+    post_limit: int = config.IG_POST_COUNT,
     batch_size: int = config.BATCH_SIZE,
     ocr_enabled: bool = config.OCR_ENABLED,
     model: str = config.OPENAI_MODEL,
@@ -53,7 +54,12 @@ def run(
     }
 
     # ── 1. Scrape ────────────────────────────────────────────────────────────
-    raw_posts, scrape_errors = scrape_channels(channels, start_date, end_date)
+    raw_posts, scrape_errors = scrape_channels(
+        channels,
+        start_date,
+        end_date,
+        post_limit=post_limit,
+    )
     result["posts_scraped"] = len(raw_posts)
     result["errors"].extend(scrape_errors)
 

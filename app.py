@@ -94,6 +94,16 @@ def scrape():
     if end_date < start_date:
         return jsonify({"error": "end_date must be on or after start_date"}), 400
 
+    raw_post_limit = body.get("post_limit", config.IG_POST_COUNT)
+    if raw_post_limit in (None, ""):
+        raw_post_limit = config.IG_POST_COUNT
+    try:
+        post_limit = int(raw_post_limit)
+    except (TypeError, ValueError):
+        return jsonify({"error": "post_limit must be an integer"}), 400
+    if post_limit < 1:
+        return jsonify({"error": "post_limit must be at least 1"}), 400
+
     channels = [c.strip() for c in (body.get("channels") or "").splitlines() if c.strip()]
     if not channels:
         return jsonify({"error": "No channels provided"}), 400
@@ -123,6 +133,7 @@ def scrape():
         start_date=start_date,
         end_date=end_date,
         api_key=api_key,
+        post_limit=post_limit,
         batch_size=batch_size,
         ocr_enabled=ocr_on,
         model=model,

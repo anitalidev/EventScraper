@@ -32,7 +32,8 @@ RAW_DIR: str = os.path.join(DATA_DIR, "raw")
 
 # ── Instagram scraper ────────────────────────────────────────────────────────
 IG_APP_ID: str = "936619743392459"
-IG_POST_COUNT: int = 50
+IG_POST_COUNT: int = int(os.environ.get("IG_POST_COUNT", "12"))
+IG_PAGE_SIZE: int = 12
 UA: str = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 Chrome/124 Safari/537.36"
