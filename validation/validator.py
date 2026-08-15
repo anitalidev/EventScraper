@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from datetime import date
 
-import config
 from models.event import ExtractedEvent
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -44,9 +43,6 @@ def validate(ev: ExtractedEvent) -> ExtractedEvent:
     if ev.time is not None and not _TIME_RE.match(ev.time):
         errors.append(f"time is not HH:MM: {ev.time!r}")
 
-    if not (0.0 <= ev.confidence <= 1.0):
-        errors.append(f"confidence {ev.confidence} is outside [0, 1]")
-
     valid_vibes = {
         "social", "career", "academic", "arts", "culture",
         "outdoors", "sports", "food", "wellness", "volunteering",
@@ -56,7 +52,7 @@ def validate(ev: ExtractedEvent) -> ExtractedEvent:
     ev.validation_errors = errors
 
     # ── status assignment ────────────────────────────────────────────────────
-    if errors or not ev.is_event or ev.confidence < config.CONFIDENCE_REVIEW:
+    if errors or not ev.is_event:
         ev.status = "rejected"
     else:
         ev.status = "review"

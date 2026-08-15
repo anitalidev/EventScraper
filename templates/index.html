@@ -174,14 +174,6 @@
 
   .event-desc { font-size: 0.86rem; color: #b0b0b0; line-height: 1.55; margin-bottom: 0.5rem; }
 
-  .confidence-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; }
-  .confidence-bar-wrap { flex: 1; height: 4px; background: #252525; border-radius: 2px; overflow: hidden; }
-  .confidence-bar { height: 100%; border-radius: 2px; transition: width 0.4s; }
-  .conf-high   { background: #22c55e; }
-  .conf-medium { background: #f59e0b; }
-  .conf-low    { background: #ef4444; }
-  .confidence-label { font-size: 0.75rem; color: #666; white-space: nowrap; }
-
   .reason-text { font-size: 0.75rem; color: #555; margin-top: 0.25rem; font-style: italic; }
   .event-link { font-size: 0.8rem; margin-top: 0.5rem; }
   .event-link a { color: #e1306c; text-decoration: none; }
@@ -382,17 +374,10 @@ ubcams"></textarea>
   function renderResults(data) {
     const events  = data.events  || [];
     const errors  = data.errors  || [];
-    const counts  = data.storage_counts || {};
 
-    // Chips
-    const chips = document.getElementById('chips');
-    chips.innerHTML = `
+    document.getElementById('chips').innerHTML = `
       <span class="chip chip-posts">${data.posts_scraped} posts scraped</span>
-      ${counts.published  ? `<span class="chip chip-published">${counts.published} published</span>`  : ''}
-      ${counts.review     ? `<span class="chip chip-review">${counts.review} for review</span>`       : ''}
-      ${counts.rejected   ? `<span class="chip chip-rejected">${counts.rejected} rejected</span>`     : ''}
-      ${counts.duplicate  ? `<span class="chip chip-duplicate">${counts.duplicate} duplicates</span>` : ''}
-      ${data.posts_with_ocr ? `<span class="chip chip-posts">${data.posts_with_ocr} OCR'd</span>`    : ''}
+      ${data.events_extracted ? `<span class="chip chip-review">${data.events_extracted} for review</span>` : ''}
     `;
 
     // Events
@@ -431,10 +416,6 @@ ubcams"></textarea>
     const card = document.createElement('div');
     card.className = `event-card ${ev.status}`;
 
-    const conf = ev.confidence ?? 0;
-    const confClass = conf >= 0.85 ? 'conf-high' : conf >= 0.55 ? 'conf-medium' : 'conf-low';
-    const confPct   = Math.round(conf * 100);
-
     const statusBadgeClass = `badge-status-${ev.status}`;
     const valErrors = (ev.validation_errors || []).join(' · ');
 
@@ -451,13 +432,6 @@ ubcams"></textarea>
         ${ev.location  ? `<span>${IC.pin} ${esc(ev.location)}</span>`      : ''}
       </div>
       ${ev.description ? `<div class="event-desc">${esc(ev.description)}</div>` : ''}
-      <div class="confidence-row">
-        <div class="confidence-bar-wrap">
-          <div class="confidence-bar ${confClass}" style="width:${confPct}%"></div>
-        </div>
-        <span class="confidence-label">${confPct}% confidence</span>
-      </div>
-      ${ev.confidence_reason ? `<div class="reason-text">${esc(ev.confidence_reason)}</div>` : ''}
       ${ev.source_url ? `<div class="event-link"><a href="${esc(ev.source_url)}" target="_blank" rel="noopener">${IC.link} View Instagram post</a></div>` : ''}
       ${valErrors ? `<div class="validation-errors">${IC.warning} ${esc(valErrors)}</div>` : ''}
     `;

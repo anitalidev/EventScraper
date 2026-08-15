@@ -39,8 +39,6 @@ class ExtractedEvent:
     Status flow: review ↔ approved ↔ review, review ↔ rejected, approved → published (final).
     """
     is_event: bool
-    confidence: float            # 0.0 – 1.0
-    confidence_reason: str
     title: str
     date: Optional[str]          # YYYY-MM-DD or None
     time: Optional[str]          # HH:MM (24 h) or None
@@ -55,9 +53,7 @@ class ExtractedEvent:
     raw_ai_response: Optional[str] = None
     validation_errors: list[str] = field(default_factory=list)
     image_url: Optional[str] = None
-
-    # ── raw post that produced this event (not written to DB) ──────────────
-    source_post: Optional[RawPost] = field(default=None, repr=False)
+    is_duplicate: bool = False
 
     # ── allowed status transitions ─────────────────────────────────────────
     _TRANSITIONS: ClassVar[dict[str, set[str]]] = {
@@ -77,18 +73,6 @@ class ExtractedEvent:
     def _transition(self, target: str) -> None:
         self.check_transition(self.status, target)
         self.status = target
-
-    def approve(self) -> None:
-        self._transition("approved")
-
-    def reject(self) -> None:
-        self._transition("rejected")
-
-    def send_back_to_review(self) -> None:
-        self._transition("review")
-
-    def publish(self) -> None:
-        self._transition("published")
 
     def compute_dedupe_key(self) -> None:
         parts = "|".join([

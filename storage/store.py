@@ -110,19 +110,18 @@ def save_events(events: list[ExtractedEvent]) -> dict[str, int]:
         ).fetchone()
         if existing:
             counts["duplicate"] += 1
+            ev.is_duplicate = True
             continue
 
         conn.execute(
             """INSERT OR IGNORE INTO events
-               (dedupe_key, status, confidence, confidence_reason, title, date, time,
+               (dedupe_key, status, title, date, time,
                 location, description, source_url, organizer, vibes, is_event,
                 raw_ai_response, validation_errors, stored_at, source_label, image_url)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 key,
                 ev.status,
-                ev.confidence,
-                ev.confidence_reason,
                 ev.title,
                 ev.date,
                 ev.time,
@@ -227,12 +226,11 @@ def create_event(fields: dict) -> dict:
     conn = _connect()
     cur = conn.execute(
         """INSERT INTO events
-           (status, confidence, title, date, time, location, description,
+           (status, title, date, time, location, description,
             source_url, organizer, vibes, source_label, is_event, stored_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
         (
             fields.get("status", "review"),
-            fields.get("confidence", 1.0),
             fields.get("title", ""),
             fields.get("date") or None,
             fields.get("time") or None,
@@ -283,6 +281,59 @@ def status_counts() -> dict[str, int]:
     ).fetchall()
     conn.close()
     return {r["status"]: r["n"] for r in rows}
+
+
+def fetch_dedupe_keys() -> set[str]:
+    """Return all dedupe_key values currently in the DB."""
+    conn = _connect()
+    rows = conn.execute(
+        "SELECT dedupe_key FROM events WHERE dedupe_key IS NOT NULL"
+    ).fetchall()
+    conn.close()
+    return {r["dedupe_key"] for r in rows}
+
+
+def insert_scraped_event(
+    *,
+    dedupe_key: str,
+    source_url: str,
+    source_label: str,
+    title: str,
+    date: Optional[str],
+    time: Optional[str],
+    description: Optional[str],
+    location: Optional[str],
+    categories: list[str],
+    image_url: Optional[str],
+) -> Optional[dict]:
+    """Insert one event produced by the generalized pipeline. Returns the new row."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _connect()
+    cur = conn.execute(
+        """INSERT OR IGNORE INTO events
+           (dedupe_key, status, title, date, time, location, description,
+            source_url, source_label, vibes, image_url, is_event, stored_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?)""",
+        (
+            dedupe_key,
+            "review",
+            title,
+            date,
+            time,
+            location,
+            description,
+            source_url,
+            source_label,
+            json.dumps(categories),
+            image_url,
+            now,
+        ),
+    )
+    event_id = cur.lastrowid
+    conn.commit()
+    row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def delete_event(event_id: int) -> bool:

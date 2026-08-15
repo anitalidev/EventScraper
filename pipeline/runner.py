@@ -2,19 +2,18 @@
 Pipeline orchestrator.
 
 Stages (in order):
-  1. Scrape  — fetch raw posts from Instagram
-  2. OCR     — extract text from post images (optional)
-  3. Store   — persist raw posts before any AI processing
-  4. Extract — AI extraction in configurable batches
-  5. Validate — field-level validation + status assignment
-  6. Store   — persist validated events with deduplication
+  1. Scrape   — fetch content from Instagram
+  2. OCR      — extract text from images (optional)
+  3. Extract  — AI extraction in configurable batches → flat list of events
+  4. Validate — field-level validation + status assignment
+  5. Thumbnails — generate thumbnails for accepted events
+  6. Store    — persist validated events with deduplication
 """
 from __future__ import annotations
+import os
 from datetime import date
-from typing import Optional
 
 import config
-from extractors.base import BaseExtractor
 from extractors.openai_extractor import OpenAIExtractor
 from extractors.thumbnail_extractor import generate_thumbnail
 from models.event import ExtractedEvent, RawPost
@@ -38,9 +37,6 @@ def run(
     ocr_enabled: bool = config.OCR_ENABLED,
     model: str = config.OPENAI_MODEL,
 ) -> dict:
-    """
-    Run the full pipeline and return a result summary dict.
-    """
     result: dict = {
         "posts_scraped": 0,
         "posts_with_ocr": 0,
@@ -67,50 +63,60 @@ def run(
                 post.ocr_text = text
                 result["posts_with_ocr"] += 1
 
-    # ── 3. Persist raw posts ─────────────────────────────────────────────────
-    store.save_raw_posts(raw_posts)
+    # Build URL → image_path lookup for thumbnail generation later
+    url_to_image: dict[str, str] = {
+        p.post_url: p.image_path
+        for p in raw_posts
+        if p.image_path
+    }
 
-    # ── 4. Extract in batches ────────────────────────────────────────────────
-    extractor: BaseExtractor = OpenAIExtractor(api_key=api_key, model=model)
+    # ── 3. Extract in batches ────────────────────────────────────────────────
+    extractor = OpenAIExtractor(api_key=api_key, model=model)
     all_extracted: list[ExtractedEvent] = []
 
     for batch in _chunk(raw_posts, batch_size):
         result["batches"] += 1
         try:
-            extracted = extractor.extract_batch(batch)
-            all_extracted.extend(extracted)
+            all_extracted.extend(extractor.extract_batch(batch))
         except Exception as e:
             result["errors"].append({
                 "batch": result["batches"],
                 "error": str(e),
-                "posts": [p.post_url for p in batch],
+                "urls": [p.post_url for p in batch],
             })
 
-    # ── 5. Validate ──────────────────────────────────────────────────────────
+    # ── 4. Validate ──────────────────────────────────────────────────────────
     validated = [validate(ev) for ev in all_extracted]
     for ev in validated:
         ev.source_label = "instagram"
     result["events_extracted"] = sum(1 for ev in validated if ev.is_event)
 
-    # ── 5b. Generate thumbnails for accepted Instagram events ─────────────────
+    # ── 5. Thumbnails ────────────────────────────────────────────────────────
     for ev in validated:
-        if ev.is_event and ev.source_post and ev.source_post.image_path:
+        image_path = url_to_image.get(ev.source_url)
+        if ev.is_event and image_path:
             ev.image_url = generate_thumbnail(
-                ev.source_post.image_path,
+                image_path,
                 ev.title,
                 api_key=api_key,
                 model=model,
             )
 
-    # ── 6. Store events ──────────────────────────────────────────────────────
+    # ── 6. Discard source images ─────────────────────────────────────────────
+    for image_path in url_to_image.values():
+        try:
+            os.remove(image_path)
+        except OSError:
+            pass
+
+    # ── 7. Store events ──────────────────────────────────────────────────────
     counts = store.save_events(validated)
     result["storage_counts"] = counts
 
-    # Serialise for the API response (exclude rejected non-events to reduce noise)
     result["events"] = [
         ev.to_dict()
         for ev in validated
-        if ev.is_event
+        if ev.is_event and not ev.is_duplicate
     ]
 
     return result

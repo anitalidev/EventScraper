@@ -25,10 +25,6 @@ class _EmailEvent(BaseModel):
         "True only for a real upcoming event with a specific date. "
         "False for job postings, deadlines, or vague announcements."
     ))
-    confidence: float = Field(ge=0.0, le=1.0, description=(
-        "How confident you are this is an actual event with extractable details."
-    ))
-    confidence_reason: str = Field(description="One sentence explaining the confidence score.")
     title: str = Field(description="Short, descriptive event title.")
     date: Optional[str] = Field(default=None, description="ISO date YYYY-MM-DD if found.")
     time: Optional[str] = Field(default=None, description="Start time HH:MM (24 h) if found.")
@@ -81,12 +77,6 @@ For source_url, use the Gmail link provided for that email.
 For vibes, pick one or more from: social, career, academic, arts, culture,
 outdoors, sports, food, wellness, volunteering. Do not invent new values.
 
-Assign confidence based on how many concrete details are present:
-- 0.9+ : date, time, location, and clear title all present
-- 0.7-0.9 : date present plus at least one of time / location
-- 0.5-0.7 : only a date is inferable
-- below 0.5 : very uncertain
-
 You will receive a numbered list of emails. Return a JSON object with a
 "results" array of exactly the same length, in the same order. Each element
 has an "events" array (may be empty)."""
@@ -113,8 +103,6 @@ class EmailExtractor(BaseExtractor):
             for item in email_result.events:
                 ev = ExtractedEvent(
                     is_event=item.is_event,
-                    confidence=item.confidence,
-                    confidence_reason=item.confidence_reason,
                     title=item.title,
                     date=item.date,
                     time=item.time,
@@ -124,7 +112,6 @@ class EmailExtractor(BaseExtractor):
                     organizer=post.username if post else item.organizer,
                     vibes=item.vibes,
                     raw_ai_response=item.model_dump_json(),
-                    source_post=post,
                 )
                 ev.compute_dedupe_key()
                 results.append(ev)

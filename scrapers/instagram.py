@@ -57,15 +57,14 @@ def _download_image(url: str, username: str) -> Optional[str]:
             ext = ".jpg"
         fname = f"ig_{username}_{hashlib.sha1(url.encode()).hexdigest()[:12]}{ext}"
         path = os.path.join(config.IMG_DIR, fname)
-        if not os.path.exists(path):
-            req = urllib.request.Request(url, headers={
-                "User-Agent": config.UA,
-                "Referer": "https://www.instagram.com/",
-            })
-            with urllib.request.urlopen(req, timeout=30) as r:
-                data = r.read()
-            with open(path, "wb") as f:
-                f.write(data)
+        req = urllib.request.Request(url, headers={
+            "User-Agent": config.UA,
+            "Referer": "https://www.instagram.com/",
+        })
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = r.read()
+        with open(path, "wb") as f:
+            f.write(data)
         return path
     except Exception as e:
         print(f"[scraper] image download failed: {e}")

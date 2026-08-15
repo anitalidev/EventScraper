@@ -12,6 +12,7 @@ from storage import store
 from validation.validator import validate
 
 
+
 def _chunk(lst: list, size: int) -> list[list]:
     return [lst[i : i + size] for i in range(0, len(lst), size)]
 
@@ -40,8 +41,6 @@ def run_email(
     if not raw_posts:
         return result
 
-    store.save_raw_posts(raw_posts)
-
     extractor = EmailExtractor(api_key=api_key, model=model)
 
     all_extracted = []
@@ -65,6 +64,6 @@ def run_email(
     counts = store.save_events(validated)
     result["storage_counts"] = counts
 
-    result["events"] = [ev.to_dict() for ev in validated if ev.is_event]
+    result["events"] = [ev.to_dict() for ev in validated if ev.is_event and not ev.is_duplicate]
 
     return result

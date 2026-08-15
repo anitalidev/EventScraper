@@ -1,14 +1,12 @@
 """
 OpenAI-backed extractor using structured JSON outputs (response_format).
 
-Structured outputs guarantee the model returns valid JSON that matches our
-Pydantic schema, eliminating the need for manual parsing or error-prone regex
-post-processing.
-
-Retry strategy: exponential back-off on rate-limit / server errors (tenacity).
+The extractor treats scraped content as anonymous text+URL pairs — there is no
+concept of a "post" here. OpenAI receives a numbered list of content items and
+returns a flat list of events across all of them. One item can yield zero,
+one, or many events.
 """
 from __future__ import annotations
-import json
 import time
 from typing import Optional
 
@@ -19,27 +17,17 @@ import config
 from extractors.base import BaseExtractor
 from models.event import RawPost, ExtractedEvent
 
+
 # ── Pydantic schema that OpenAI will enforce ────────────────────────────────
 
-class _SingleEvent(BaseModel):
-    is_event: bool = Field(description=(
-        "True only for real upcoming events with a specific date. "
-        "False for job postings, application deadlines, exec recruitment, "
-        "general ads, or vague announcements."
-    ))
-    confidence: float = Field(ge=0.0, le=1.0, description=(
-        "How confident you are this is an actual event with extractable details."
-    ))
-    confidence_reason: str = Field(description=(
-        "One sentence explaining the confidence score."
-    ))
+class _Event(BaseModel):
     title: str = Field(description="Short, descriptive event title.")
     date: Optional[str] = Field(default=None, description="ISO date YYYY-MM-DD if found.")
     time: Optional[str] = Field(default=None, description="Start time HH:MM (24 h) if found.")
     location: Optional[str] = Field(default=None, description="Venue or location string.")
     description: str = Field(description="1-2 sentence summary of what the event is.")
-    source_url: str = Field(description="The Instagram post URL provided.")
-    organizer: str = Field(description="The @username of the account that posted.")
+    source_url: str = Field(description="The URL of the content item this event was found in.")
+    organizer: str = Field(description="The @username or name of the account that posted.")
     vibes: list[str] = Field(description=(
         "One or more vibes that best describe this event. "
         "Choose only from: social, career, academic, arts, culture, "
@@ -48,48 +36,42 @@ class _SingleEvent(BaseModel):
 
 
 class _BatchResponse(BaseModel):
-    results: list[_SingleEvent]
+    events: list[_Event]
 
 
 # ── System prompt ────────────────────────────────────────────────────────────
 
 _SYSTEM_PROMPT = """You are an event-extraction assistant for a university event aggregator.
 
-Your task is to analyse Instagram post captions and decide whether each post
-describes a real, specific, upcoming event.
+You will receive a numbered list of content items scraped from social media.
+Each item has a source URL and text content. Extract ALL real, specific,
+upcoming events you find across all items.
 
-REJECT (set is_event=false) for:
+Return a flat list of events under the "events" key — do NOT group by content
+item. A single item may yield multiple events (e.g. a series of workshops on
+different dates); extract each as a separate entry. If an item contains no
+real events, produce nothing for it.
+
+Only extract events that:
+- Have (or imply) a specific date
+- Are open to attendees
+
+Do NOT extract:
 - Job postings or hiring announcements
-- Applications open / deadline reminders
-- Executive or director recruitment
-- General club promotions without a specific event date
-- Announcements that do not correspond to a single, specific event occurrence
+- Application or deadline reminders
+- Executive or committee recruitment
+- General club promotions with no specific date
+- Recurring programme announcements with no specific occurrence
 
-ACCEPT (set is_event=true) only when the post describes an event that:
-- Has (or implies) a specific date
-- Is open to attendees
-- Is not just a recurring programme announcement with no specifics
+For each event, set source_url to the URL of the content item it came from.
 
-For vibes, pick one or more from this fixed list that best describe the event's
-feel or intent: social, career, academic, arts, culture, outdoors, sports,
-food, wellness, volunteering. Do not invent new vibe values.
+For vibes, pick one or more from this fixed list: social, career, academic,
+arts, culture, outdoors, sports, food, wellness, volunteering.
 
-Assign confidence based on how many concrete details are present:
-- 0.9+ : date, time, location, and clear title all present
-- 0.7-0.9 : date present plus at least one of time / location
-- 0.5-0.7 : only a date is inferable
-- below 0.5 : very uncertain — likely not a real event
-
-You will receive a numbered list of posts. Return a JSON object with a
-"results" array of exactly the same length, in the same order.
-Each element must conform to the schema exactly."""
+"""
 
 
 class OpenAIExtractor(BaseExtractor):
-    """
-    Extracts events from batches of RawPost objects using the OpenAI API
-    with structured JSON output mode.
-    """
 
     def __init__(self, api_key: str, model: str = config.OPENAI_MODEL):
         self._client = OpenAI(api_key=api_key)
@@ -103,45 +85,34 @@ class OpenAIExtractor(BaseExtractor):
         raw_response = self._call_api_with_retry(user_msg)
 
         results: list[ExtractedEvent] = []
-        for i, item in enumerate(raw_response.results):
-            post = posts[i] if i < len(posts) else None
+        for item in raw_response.events:
             ev = ExtractedEvent(
-                is_event=item.is_event,
-                confidence=item.confidence,
-                confidence_reason=item.confidence_reason,
+                is_event=True,
                 title=item.title,
                 date=item.date,
                 time=item.time,
                 location=item.location,
                 description=item.description,
-                source_url=item.source_url or (post.post_url if post else ""),
+                source_url=item.source_url,
                 organizer=item.organizer,
                 vibes=item.vibes,
                 raw_ai_response=item.model_dump_json(),
-                source_post=post,
             )
             ev.compute_dedupe_key()
             results.append(ev)
 
         return results
 
-    # ── private ─────────────────────────────────────────────────────────────
-
     def _build_user_message(self, posts: list[RawPost]) -> str:
         lines = []
         for i, p in enumerate(posts, 1):
             lines.append(
-                f"[{i}] @{p.username}  |  posted: {p.taken_at[:10]}\n"
-                f"URL: {p.post_url}\n"
-                f"Text: {p.combined_text()}"
+                f"[{i}] URL: {p.post_url}\n"
+                f"Content: {p.combined_text()}"
             )
         return "\n\n---\n\n".join(lines)
 
-    def _call_api_with_retry(
-        self,
-        user_msg: str,
-        max_retries: int = 4,
-    ) -> _BatchResponse:
+    def _call_api_with_retry(self, user_msg: str, max_retries: int = 4) -> _BatchResponse:
         delay = 2.0
         last_err: Exception | None = None
 

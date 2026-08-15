@@ -70,14 +70,6 @@
   .row-meta { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.78rem; color: var(--muted2); margin-bottom: 0.35rem; }
   .row-meta span { display: flex; align-items: center; gap: 0.3rem; }
   .row-desc { font-size: 0.82rem; color: #bbb; line-height: 1.5; margin-bottom: 0.4rem; }
-  .conf-row { display: flex; align-items: center; gap: 0.5rem; }
-  .conf-bar-wrap { flex: 1; max-width: 120px; height: 3px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
-  .conf-bar { height: 100%; border-radius: 2px; }
-  .conf-high   { background: #22c55e; }
-  .conf-medium { background: var(--amber); }
-  .conf-low    { background: var(--red); }
-  .conf-label  { font-size: 0.72rem; color: var(--muted); }
-  .conf-reason { font-size: 0.72rem; color: var(--muted); font-style: italic; margin-left: 0.3rem; }
   .ig-link { font-size: 0.75rem; color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.4rem; }
   .ig-link:hover { text-decoration: underline; }
   .vibe-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
@@ -196,10 +188,6 @@
     div.className = `event-row${_selected.has(ev.id) ? ' selected' : ''}`;
     div.dataset.id = ev.id;
 
-    const conf    = ev.confidence ?? 0;
-    const confPct = Math.round(conf * 100);
-    const confCls = conf >= 0.85 ? 'conf-high' : conf >= 0.55 ? 'conf-medium' : 'conf-low';
-
     div.innerHTML = `
       <div class="row-check">
         <input type="checkbox" ${_selected.has(ev.id) ? 'checked' : ''} onchange="toggleSelect(${ev.id},this.checked,event)">
@@ -215,11 +203,6 @@
           ${ev.location  ? `<span>${IC.pin} ${esc(ev.location)}</span>` : ''}
         </div>
         ${ev.description ? `<div class="row-desc">${esc(ev.description)}</div>` : ''}
-        <div class="conf-row">
-          <div class="conf-bar-wrap"><div class="conf-bar ${confCls}" style="width:${confPct}%"></div></div>
-          <span class="conf-label">${confPct}% confidence</span>
-          ${ev.confidence_reason ? `<span class="conf-reason">— ${esc(ev.confidence_reason)}</span>` : ''}
-        </div>
         ${vibeHtml(ev.vibes)}
         ${ev.source_url ? `<a class="ig-link" href="${esc(ev.source_url)}" target="_blank" rel="noopener">${IC.link} View post</a>` : ''}
       </div>

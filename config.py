@@ -14,8 +14,6 @@ BATCH_SIZE: int = int(os.environ.get("BATCH_SIZE", "8"))
 OCR_ENABLED: bool = os.environ.get("OCR_ENABLED", "true").lower() == "true"
 
 # ── Confidence thresholds ───────────────────────────────────────────────────
-CONFIDENCE_PUBLISH: float = 0.85   # auto-publish above this
-CONFIDENCE_REVIEW: float  = 0.55   # flag for review above this, reject below
 
 # ── Storage paths ───────────────────────────────────────────────────────────
 DATA_DIR: str = os.environ.get("DATA_DIR", "./data")

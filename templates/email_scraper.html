@@ -194,13 +194,6 @@
   .badge-status-rejected  { background: #1f0a0a; color: #f87171; }
   .event-meta { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
   .event-meta span { display: flex; align-items: center; gap: 0.25rem; }
-  .confidence-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; }
-  .confidence-bar-wrap { flex: 1; height: 4px; background: #252525; border-radius: 2px; overflow: hidden; }
-  .confidence-bar { height: 100%; border-radius: 2px; transition: width 0.4s; }
-  .conf-high   { background: #22c55e; }
-  .conf-medium { background: #f59e0b; }
-  .conf-low    { background: #ef4444; }
-  .confidence-label { font-size: 0.75rem; color: #666; white-space: nowrap; }
   .reason-text  { font-size: 0.75rem; color: #555; margin-top: 0.25rem; font-style: italic; }
   .event-link   { font-size: 0.8rem; margin-top: 0.5rem; }
   .event-link a { color: var(--accent); text-decoration: none; }
@@ -374,15 +367,11 @@
 
   function renderResults(data) {
     const events  = data.events  || [];
-    const counts  = data.storage_counts || {};
     const errors  = data.errors  || [];
 
     document.getElementById('chips').innerHTML = `
       <span class="chip chip-blue">${IC.mail} ${data.posts_scraped} email${data.posts_scraped !== 1 ? 's' : ''} scanned</span>
-      ${counts.review    ? `<span class="chip chip-review">${counts.review} for review</span>`       : ''}
-      ${counts.published ? `<span class="chip chip-published">${counts.published} published</span>`  : ''}
-      ${counts.rejected  ? `<span class="chip chip-rejected">${counts.rejected} rejected</span>`     : ''}
-      ${counts.duplicate ? `<span class="chip chip-duplicate">${counts.duplicate} duplicates</span>` : ''}
+      ${data.events_extracted ? `<span class="chip chip-review">${data.events_extracted} for review</span>` : ''}
     `;
 
     document.getElementById('resultsHeading').textContent =
@@ -392,9 +381,6 @@
     list.innerHTML = '';
 
     for (const ev of events) {
-      const conf = ev.confidence ?? 0;
-      const confClass = conf >= 0.85 ? 'conf-high' : conf >= 0.55 ? 'conf-medium' : 'conf-low';
-      const confPct   = Math.round(conf * 100);
       const card = document.createElement('div');
       card.className = `event-card ${ev.status}`;
       card.innerHTML = `
@@ -409,13 +395,6 @@
           ${ev.location  ? `<span>${IC.pin} ${esc(ev.location)}</span>`      : ''}
         </div>
         ${ev.description ? `<div class="email-snippet">${esc(ev.description)}</div>` : ''}
-        <div class="confidence-row">
-          <div class="confidence-bar-wrap">
-            <div class="confidence-bar ${confClass}" style="width:${confPct}%"></div>
-          </div>
-          <span class="confidence-label">${confPct}% confidence</span>
-        </div>
-        ${ev.confidence_reason ? `<div class="reason-text">${esc(ev.confidence_reason)}</div>` : ''}
         ${ev.source_url ? `<div class="event-link"><a href="${esc(ev.source_url)}" target="_blank" rel="noopener">${IC.mail} View email</a></div>` : ''}
       `;
       list.appendChild(card);
