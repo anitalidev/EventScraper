@@ -6,7 +6,7 @@ scraper that produces RawPost objects — everything downstream is source-agnost
 from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field, asdict
-from typing import Optional
+from typing import ClassVar, Optional
 
 
 @dataclass
@@ -60,7 +60,7 @@ class ExtractedEvent:
     source_post: Optional[RawPost] = field(default=None, repr=False)
 
     # ── allowed status transitions ─────────────────────────────────────────
-    _TRANSITIONS: dict[str, set[str]] = {
+    _TRANSITIONS: ClassVar[dict[str, set[str]]] = {
         "review":   {"approved", "rejected"},
         "approved": {"review", "published"},
         "rejected": {"review"},

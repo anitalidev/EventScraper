@@ -424,6 +424,8 @@
 
     const isApp    = ev.status === 'approved';
     const isPub    = ev.status === 'published';
+    const isRev    = ev.status === 'review';
+    const isRej    = ev.status === 'rejected';
     const isInUbc  = ev._also_in_ubc;
 
     let badgeHtml = isUbc
@@ -437,13 +439,30 @@
     const pencil = `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/><path d="M9.5 4.5l2 2"/></svg>`;
     let actionsHtml = '';
     if (!isUbc && !isInUbc) {
-      actionsHtml = `
-        <button class="action-btn btn-approve" onclick="setStatus(${ev.id},'approved')" ${isApp||isPub ? 'disabled' : ''}>${IC.check} Approve</button>
-        ${isApp ? `<button class="action-btn btn-publish" onclick="setStatus(${ev.id},'published')">${IC.link} Publish to UBC</button>` : ''}
-        <button class="action-btn btn-reject" onclick="setStatus(${ev.id},'rejected')">${IC.x} Reject</button>
-        ${isApp ? `<button class="action-btn btn-review" onclick="setStatus(${ev.id},'review')">${IC.undo} Review</button>` : ''}
-        <button class="action-btn btn-edit" onclick="openModal(${ev.id})" style="color:var(--muted2);border-color:var(--border2);">${pencil} Edit</button>
-      `;
+      // Buttons shown per state match the allowed transitions exactly:
+      // review   → approve, reject
+      // approved → publish, return to review
+      // rejected → return to review
+      // published → (no actions)
+      const editBtn = `<button class="action-btn btn-edit" onclick="openModal(${ev.id})" style="color:var(--muted2);border-color:var(--border2);">${pencil} Edit</button>`;
+      if (isRev) {
+        actionsHtml = `
+          <button class="action-btn btn-approve" onclick="approveEvent(${ev.id})">${IC.check} Approve</button>
+          <button class="action-btn btn-reject"  onclick="rejectEvent(${ev.id})">${IC.x} Reject</button>
+          ${editBtn}
+        `;
+      } else if (isApp) {
+        actionsHtml = `
+          <button class="action-btn btn-publish" onclick="publishEvent(${ev.id})">${IC.link} Publish to UBC</button>
+          <button class="action-btn btn-review"  onclick="returnToReview(${ev.id})">${IC.undo} Return to Review</button>
+          ${editBtn}
+        `;
+      } else if (isRej) {
+        actionsHtml = `
+          <button class="action-btn btn-review" onclick="returnToReview(${ev.id})">${IC.undo} Return to Review</button>
+          ${editBtn}
+        `;
+      }
     }
 
     div.innerHTML = `
@@ -503,6 +522,24 @@
     document.getElementById('navCounter').textContent = `${_navIdx + 1} of ${_navItems.length} ${label}`;
   }
 
+  async function _callAction(id, action, successMsg) {
+    try {
+      const resp = await fetch(`/api/events/${id}/${action}`, { method: 'POST' });
+      if (!resp.ok) {
+        const ct = resp.headers.get('content-type') || '';
+        const msg = ct.includes('json') ? (await resp.json()).error : await resp.text();
+        throw new Error(msg || resp.statusText);
+      }
+      toast(successMsg, 'success');
+      await loadHub();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  const approveEvent    = id => _callAction(id, 'approve',  'Event approved');
+  const rejectEvent     = id => _callAction(id, 'reject',   'Event rejected');
+  const returnToReview  = id => _callAction(id, 'review',   'Event returned to review');
+  const publishEvent    = id => _callAction(id, 'publish',  'Event published to UBC Discovery');
+
   async function publishAll() {
     const approved = _allEvents.filter(e => e._source === 'scraper' && e.status === 'approved');
     if (!approved.length) { toast('No approved events to publish', ''); return; }
@@ -512,10 +549,7 @@
     let succeeded = 0, failed = 0;
     for (const ev of approved) {
       try {
-        const resp = await fetch(`/api/events/${ev.id}/status`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'published' }),
-        });
+        const resp = await fetch(`/api/events/${ev.id}/publish`, { method: 'POST' });
         if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
         succeeded++;
       } catch { failed++; }
@@ -523,20 +557,6 @@
     btn.disabled = false;
     toast(`${succeeded} published${failed ? `, ${failed} failed` : ''}`, failed ? 'error' : 'success');
     await loadHub();
-  }
-
-  async function setStatus(id, status) {
-    document.querySelector(`.event-row[data-id="${id}"]`)?.style.setProperty('outline', 'none');
-    try {
-      const resp = await fetch(`/api/events/${id}/status`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
-      const label = { published: 'published to UBC Discovery', approved: 'approved', rejected: 'rejected', review: 'moved to review' };
-      toast(`Event ${label[status] || status}`, 'success');
-      await loadHub();
-    } catch (e) { toast(e.message, 'error'); }
   }
 
   function formatDate(d) {
