@@ -17,8 +17,10 @@ from functools import lru_cache
 from typing import Optional
 
 import boto3
+import io
 import requests
 from botocore.config import Config
+from PIL import Image
 
 import config
 
@@ -45,12 +47,31 @@ def _upload_image(local_path: str) -> Optional[str]:
     key = f"event-images/{uuid.uuid4()}{ext}"
     content_type = mimetypes.guess_type(local_path)[0] or "image/jpeg"
 
+    _MAX_BYTES = 2 * 1024 * 1024
+
     try:
         with open(local_path, "rb") as f:
-            _s3_client().put_object(
+            data = f.read()
+
+        if len(data) > _MAX_BYTES:
+            img = Image.open(io.BytesIO(data))
+            buf = io.BytesIO()
+            quality = 82
+            while quality >= 40:
+                buf.seek(0); buf.truncate()
+                img.convert("RGB").save(buf, "JPEG", quality=quality)
+                if buf.tell() <= _MAX_BYTES:
+                    break
+                quality -= 10
+            data = buf.getvalue()
+            content_type = "image/jpeg"
+            key = os.path.splitext(key)[0] + ".jpg"
+            log.info("Recompressed image to %d bytes (quality=%d)", len(data), quality)
+
+        _s3_client().put_object(
                 Bucket=config.S3_BUCKET_NAME,
                 Key=key,
-                Body=f,
+                Body=data,
                 ContentType=content_type,
             )
         log.info("Uploaded event image to S3: %s", key)

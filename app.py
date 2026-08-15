@@ -17,6 +17,7 @@ from integrations.ubc_discovery import (
     list_events as ubc_list_events,
     publish_event,
 )
+from models.event import ExtractedEvent
 from pipeline.runner import run
 from storage.store import (
     bulk_delete,
@@ -232,31 +233,62 @@ def api_update_event(event_id: int):
     return jsonify(row)
 
 
-@app.route("/api/events/<int:event_id>/status", methods=["POST"])
-def api_set_status(event_id: int):
-    body = request.get_json(force=True) or {}
-    new_status = body.get("status", "")
-
-    if new_status == "published":
-        return _publish_to_ubc(event_id)
-
-    try:
-        row = set_event_status(event_id, new_status)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    if row is None:
-        return jsonify({"error": "Not found"}), 404
-    return jsonify(row)
-
-
-def _publish_to_ubc(event_id: int):
-    """
-    Push an approved event to UBC Discovery and mark it published.
-    If UBC Discovery is not configured, mark published locally (dev mode).
-    """
+def _get_event_or_404(event_id: int):
     event = get_event(event_id)
     if event is None:
-        return jsonify({"error": "Not found"}), 404
+        return None, jsonify({"error": "Not found"}), 404
+    return event, None, None
+
+
+def _check_transition_or_400(current_status: str, target: str):
+    try:
+        ExtractedEvent.check_transition(current_status, target)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return None, None
+
+
+@app.route("/api/events/<int:event_id>/approve", methods=["POST"])
+def api_approve_event(event_id: int):
+    event, err_response, err_code = _get_event_or_404(event_id)
+    if err_response:
+        return err_response, err_code
+    err_response, err_code = _check_transition_or_400(event["status"], "approved")
+    if err_response:
+        return err_response, err_code
+    return jsonify(set_event_status(event_id, "approved"))
+
+
+@app.route("/api/events/<int:event_id>/reject", methods=["POST"])
+def api_reject_event(event_id: int):
+    event, err_response, err_code = _get_event_or_404(event_id)
+    if err_response:
+        return err_response, err_code
+    err_response, err_code = _check_transition_or_400(event["status"], "rejected")
+    if err_response:
+        return err_response, err_code
+    return jsonify(set_event_status(event_id, "rejected"))
+
+
+@app.route("/api/events/<int:event_id>/review", methods=["POST"])
+def api_return_to_review(event_id: int):
+    event, err_response, err_code = _get_event_or_404(event_id)
+    if err_response:
+        return err_response, err_code
+    err_response, err_code = _check_transition_or_400(event["status"], "review")
+    if err_response:
+        return err_response, err_code
+    return jsonify(set_event_status(event_id, "review"))
+
+
+@app.route("/api/events/<int:event_id>/publish", methods=["POST"])
+def api_publish_event(event_id: int):
+    event, err_response, err_code = _get_event_or_404(event_id)
+    if err_response:
+        return err_response, err_code
+    err_response, err_code = _check_transition_or_400(event["status"], "published")
+    if err_response:
+        return err_response, err_code
 
     if not config.UBC_DISCOVERY_API_URL:
         row = set_event_status(event_id, "published")
@@ -266,11 +298,9 @@ def _publish_to_ubc(event_id: int):
         created = publish_event(event)
         row = record_ubc_publish(event_id, ubc_event_id=created.ubc_event_id)
         return jsonify(row)
-
     except UBCDiscoveryConflict as e:
         row = record_ubc_publish(event_id, ubc_event_id=e.existing_id)
         return jsonify({**row, "ubc_discovery_conflict": True})
-
     except (UBCDiscoveryError, Exception) as e:
         record_ubc_publish(event_id, ubc_event_id=None, error=str(e))
         return jsonify({"error": f"UBC Discovery publish failed: {e}"}), 502

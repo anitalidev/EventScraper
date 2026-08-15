@@ -50,7 +50,6 @@ CREATE TABLE IF NOT EXISTS events (
     validation_errors       TEXT,
     stored_at               TEXT NOT NULL,
     ubc_discovery_event_id  TEXT,
-    approved_at             TEXT,
     approval_error          TEXT
 );
 
@@ -58,7 +57,6 @@ CREATE TABLE IF NOT EXISTS events (
 
 _MIGRATIONS = [
     "ALTER TABLE events ADD COLUMN ubc_discovery_event_id TEXT",
-    "ALTER TABLE events ADD COLUMN approved_at TEXT",
     "ALTER TABLE events ADD COLUMN approval_error TEXT",
     "ALTER TABLE events ADD COLUMN vibes TEXT",
     "ALTER TABLE events ADD COLUMN source_label TEXT",
@@ -255,17 +253,8 @@ def create_event(fields: dict) -> dict:
 
 
 def set_event_status(event_id: int, status: str) -> Optional[dict]:
-    if status not in ("published", "approved", "review", "rejected"):
-        raise ValueError(f"Invalid status: {status!r}")
-    now = datetime.now(timezone.utc).isoformat()
     conn = _connect()
-    if status == "approved":
-        conn.execute(
-            "UPDATE events SET status = ?, approved_at = ? WHERE id = ?",
-            (status, now, event_id),
-        )
-    else:
-        conn.execute("UPDATE events SET status = ? WHERE id = ?", (status, event_id))
+    conn.execute("UPDATE events SET status = ? WHERE id = ?", (status, event_id))
     conn.commit()
     row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
     conn.close()
@@ -273,8 +262,6 @@ def set_event_status(event_id: int, status: str) -> Optional[dict]:
 
 
 def bulk_set_status(event_ids: list[int], status: str) -> int:
-    if status not in ("published", "approved", "review", "rejected"):
-        raise ValueError(f"Invalid status: {status!r}")
     if not event_ids:
         return 0
     placeholders = ",".join("?" * len(event_ids))
@@ -314,26 +301,20 @@ def record_ubc_publish(
 ) -> Optional[dict]:
     """
     After a UBC Discovery publish attempt, store the result.
-    On success: sets ubc_discovery_event_id, approved_at, status=published, clears approval_error.
+    On success: deletes the event row from local DB (image already removed by _upload_image).
     On failure: sets approval_error, leaves status unchanged.
     """
-    now = datetime.now(timezone.utc).isoformat()
     conn = _connect()
     if ubc_event_id is not None:
-        conn.execute(
-            """UPDATE events
-               SET ubc_discovery_event_id = ?, approved_at = ?, status = 'published',
-                   approval_error = NULL
-               WHERE id = ?""",
-            (ubc_event_id, now, event_id),
-        )
+        row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
     else:
         conn.execute(
             "UPDATE events SET approval_error = ? WHERE id = ?",
             (error, event_id),
         )
+        row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
     conn.commit()
-    row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
 
