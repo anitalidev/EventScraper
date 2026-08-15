@@ -17,8 +17,6 @@ from integrations.ubc_discovery import (
     list_events as ubc_list_events,
     publish_event,
 )
-from models.event import ExtractedEvent
-from pipeline.runner import run
 from storage.store import (
     bulk_delete,
     bulk_set_status,
@@ -108,7 +106,8 @@ def scrape():
     if isinstance(ocr_on, str):
         ocr_on = ocr_on.lower() == "true"
 
-    result = run(
+    from scrapers.instagram import scrape_instagram
+    events, posts_scraped = scrape_instagram(
         channels=channels,
         start_date=start_date,
         end_date=end_date,
@@ -117,7 +116,7 @@ def scrape():
         ocr_enabled=ocr_on,
         model=model,
     )
-    return jsonify(result)
+    return jsonify({"posts_scraped": posts_scraped, "events_extracted": len(events), "events": events})
 
 
 @app.route("/events")
@@ -240,11 +239,17 @@ def _get_event_or_404(event_id: int):
     return event, None, None
 
 
+_TRANSITIONS: dict[str, set[str]] = {
+    "review":    {"approved", "rejected"},
+    "approved":  {"review", "published"},
+    "rejected":  {"review"},
+    "published": set(),
+}
+
+
 def _check_transition_or_400(current_status: str, target: str):
-    try:
-        ExtractedEvent.check_transition(current_status, target)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    if target not in _TRANSITIONS.get(current_status, set()):
+        return jsonify({"error": f"Cannot transition from {current_status!r} to {target!r}"}), 400
     return None, None
 
 
@@ -467,17 +472,18 @@ def api_email_scraper_extract():
 
     try:
         from googleapiclient.discovery import build
-        from scrapers.gmail import fetch_raw_posts
-        from pipeline.email_runner import run_email
+        from scrapers.gmail import scrape_gmail
     except ImportError as e:
         return jsonify({"error": f"Missing dependency: {e}"}), 500
 
     service = build("gmail", "v1", credentials=creds)
-    raw_posts, fetch_errors = fetch_raw_posts(service, max_results=max_results, q=q)
-
-    result = run_email(raw_posts, api_key=api_key, model=model, batch_size=batch_size)
-    result["errors"] = fetch_errors + result.get("errors", [])
-    return jsonify(result)
+    events, emails_scraped = scrape_gmail(
+        service, api_key,
+        max_results=max_results,
+        batch_size=batch_size,
+        model=model,
+    )
+    return jsonify({"posts_scraped": emails_scraped, "events_extracted": len(events), "events": events})
 
 
 @app.route("/api/email-scraper/messages")

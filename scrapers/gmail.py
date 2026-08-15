@@ -1,17 +1,23 @@
 """
-Gmail scraper — fetches emails via the Gmail API and converts them to RawPost
-objects so the existing extract → validate → store pipeline can process them
-without any changes.
+Gmail scraper.
+
+Uses a pre-authenticated Gmail API service object (Google OAuth) to fetch
+emails addressed to the +event alias, builds a list of Source objects,
+and delegates to the generalized pipeline.
 """
 from __future__ import annotations
 
 import base64
 import email.utils
+import os
 import re
 from datetime import datetime, timezone
 from typing import Optional
 
-from models.event import RawPost
+import config
+from pipeline.event_creation import Source, create_events
+
+_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 
 def _decode_body(payload: dict) -> str:
@@ -26,7 +32,6 @@ def _decode_body(payload: dict) -> str:
 
     if mime.startswith("multipart/"):
         parts = payload.get("parts", [])
-        # Prefer text/plain parts; fall back to text/html stripped of tags
         plain = ""
         html_fallback = ""
         for part in parts:
@@ -43,42 +48,78 @@ def _decode_body(payload: dict) -> str:
     return ""
 
 
-def _parse_date(date_header: str) -> str:
-    """Parse an RFC 2822 date header into an ISO-8601 UTC string."""
-    try:
-        parsed = email.utils.parsedate_to_datetime(date_header)
-        return parsed.astimezone(timezone.utc).isoformat()
-    except Exception:
-        return datetime.now(timezone.utc).isoformat()
-
-
-def fetch_raw_posts(service, max_results: int = 20, q: str = "") -> tuple[list[RawPost], list[str]]:
+def _first_image_attachment(service, message_id: str, payload: dict) -> Optional[str]:
     """
-    Fetch emails from Gmail and return (posts, errors).
-
-    Each email becomes one RawPost:
-      source   = "email"
-      username = sender address
-      post_url = Gmail deep-link to the message
-      taken_at = sent date (UTC ISO-8601)
-      caption  = "Subject: …\n\n<body text>"
+    Download the first image attachment from the message and save it locally.
+    Returns the file path, or None if there are no image attachments.
     """
-    posts: list[RawPost] = []
-    errors: list[str] = []
+    for part in payload.get("parts", []):
+        mime = part.get("mimeType", "")
+        if mime not in _IMAGE_MIME_TYPES:
+            continue
 
-    list_params: dict = {"userId": "me", "maxResults": max_results}
-    if q:
-        list_params["q"] = q
+        attachment_id = part.get("body", {}).get("attachmentId")
+        if not attachment_id:
+            continue
+
+        try:
+            attachment = service.users().messages().attachments().get(
+                userId="me", messageId=message_id, id=attachment_id
+            ).execute()
+            data = base64.urlsafe_b64decode(attachment["data"] + "==")
+
+            ext = mime.split("/")[-1].replace("jpeg", "jpg")
+            os.makedirs(config.IMG_DIR, exist_ok=True)
+            path = os.path.join(config.IMG_DIR, f"gmail_{message_id}.{ext}")
+            with open(path, "wb") as f:
+                f.write(data)
+            return path
+        except Exception as e:
+            print(f"[gmail] attachment download failed for {message_id}: {e}")
+
+    return None
+
+
+def _parse_sender_email(from_header: str) -> str:
+    """Extract the bare email address from a From header like 'Name <addr@example.com>'."""
+    _, addr = email.utils.parseaddr(from_header)
+    return addr or from_header
+
+
+def scrape_gmail(
+    service,
+    api_key: str,
+    *,
+    max_results: int = 20,
+    ocr_enabled: bool = config.OCR_ENABLED,
+    batch_size: int = config.BATCH_SIZE,
+    model: str = config.OPENAI_MODEL,
+) -> tuple[list[dict], int]:
+    """
+    Fetch emails from Gmail (filtered to the +event alias) and extract events.
+
+    Args:
+        service:     Authenticated Gmail API service object.
+        api_key:     OpenAI API key.
+        max_results: Maximum number of emails to fetch.
+
+    Returns:
+        (events, emails_scraped) — list of created event rows and the count
+        of emails that were successfully fetched.
+    """
+    sources: list[Source] = []
 
     try:
-        results = service.users().messages().list(**list_params).execute()
+        results = service.users().messages().list(
+            userId="me",
+            maxResults=max_results,
+            q="to:+event",
+        ).execute()
     except Exception as e:
-        errors.append(f"Gmail list failed: {e}")
-        return posts, errors
+        print(f"[gmail] list failed: {e}")
+        return [], 0
 
-    messages = results.get("messages", [])
-
-    for msg in messages:
+    for msg in results.get("messages", []):
         try:
             data = service.users().messages().get(
                 userId="me", id=msg["id"], format="full",
@@ -86,24 +127,23 @@ def fetch_raw_posts(service, max_results: int = 20, q: str = "") -> tuple[list[R
 
             headers = {h["name"]: h["value"] for h in data["payload"].get("headers", [])}
             subject = headers.get("Subject", "(No Subject)")
-            from_   = headers.get("From", "unknown")
-            date_h  = headers.get("Date", "")
+            from_header = headers.get("From", "")
+            sender_email = _parse_sender_email(from_header)
 
-            body = _decode_body(data["payload"]).strip()
-            if not body:
-                body = data.get("snippet", "")
+            body = _decode_body(data["payload"]).strip() or data.get("snippet", "")
+            text = f"Subject: {subject}\n\n{body}"
 
-            caption = f"Subject: {subject}\n\n{body}"
-            post_url = f"https://mail.google.com/mail/u/0/#inbox/{msg['id']}"
+            image_path = _first_image_attachment(service, msg["id"], data["payload"])
 
-            posts.append(RawPost(
-                source="email",
-                username=from_,
-                post_url=post_url,
-                taken_at=_parse_date(date_h),
-                caption=caption,
+            sources.append(Source(
+                source=sender_email,
+                text=text,
+                image=image_path,
             ))
         except Exception as e:
-            errors.append(f"Failed to fetch message {msg['id']}: {e}")
+            print(f"[gmail] failed to fetch message {msg['id']}: {e}")
 
-    return posts, errors
+    emails_scraped = len(sources)
+    events = create_events(sources, "Gmail", api_key,
+                    ocr_enabled=ocr_enabled, batch_size=batch_size, model=model)
+    return events, emails_scraped

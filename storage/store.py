@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import config
-from models.event import RawPost, ExtractedEvent
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS raw_posts (
@@ -76,73 +75,6 @@ def _connect() -> sqlite3.Connection:
             pass  # column already exists
     conn.commit()
     return conn
-
-
-def save_raw_posts(posts: list[RawPost]) -> None:
-    now = datetime.now(timezone.utc).isoformat()
-    conn = _connect()
-    conn.executemany(
-        """INSERT INTO raw_posts
-           (source, username, post_url, taken_at, caption, ocr_text, image_path, stored_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        [
-            (p.source, p.username, p.post_url, p.taken_at,
-             p.caption, p.ocr_text, p.image_path, now)
-            for p in posts
-        ],
-    )
-    conn.commit()
-    conn.close()
-
-
-def save_events(events: list[ExtractedEvent]) -> dict[str, int]:
-    """
-    Upsert events by dedupe_key.  Returns counts by status.
-    """
-    now = datetime.now(timezone.utc).isoformat()
-    counts: dict[str, int] = {"published": 0, "review": 0, "rejected": 0, "duplicate": 0}
-    conn = _connect()
-
-    for ev in events:
-        key = ev.dedupe_key or ""
-        existing = conn.execute(
-            "SELECT id FROM events WHERE dedupe_key = ?", (key,)
-        ).fetchone()
-        if existing:
-            counts["duplicate"] += 1
-            ev.is_duplicate = True
-            continue
-
-        conn.execute(
-            """INSERT OR IGNORE INTO events
-               (dedupe_key, status, title, date, time,
-                location, description, source_url, organizer, vibes, is_event,
-                raw_ai_response, validation_errors, stored_at, source_label, image_url)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                key,
-                ev.status,
-                ev.title,
-                ev.date,
-                ev.time,
-                ev.location,
-                ev.description,
-                ev.source_url,
-                ev.organizer,
-                json.dumps(ev.vibes),
-                int(ev.is_event),
-                ev.raw_ai_response,
-                json.dumps(ev.validation_errors),
-                now,
-                ev.source_label,
-                ev.image_url,
-            ),
-        )
-        counts[ev.status] = counts.get(ev.status, 0) + 1
-
-    conn.commit()
-    conn.close()
-    return counts
 
 
 def fetch_events(status: Optional[str] = None, limit: int = 200) -> list[dict]:

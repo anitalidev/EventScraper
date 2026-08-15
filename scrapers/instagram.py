@@ -2,10 +2,10 @@
 Instagram scraper.
 
 Uses the private Instagram API endpoint that the official web app uses.
-Returns RawPost objects; image downloading is handled here so CDN URLs
-(which expire) are captured immediately.
+Builds a list of Source objects and delegates to the generalized pipeline.
 """
 from __future__ import annotations
+
 import hashlib
 import html
 import json
@@ -18,7 +18,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 import config
-from models.event import RawPost
+from pipeline.event_creation import Source, create_events
 
 
 def username_from_input(raw: str) -> str:
@@ -67,7 +67,7 @@ def _download_image(url: str, username: str) -> Optional[str]:
             f.write(data)
         return path
     except Exception as e:
-        print(f"[scraper] image download failed: {e}")
+        print(f"[instagram] image download failed: {e}")
         return None
 
 
@@ -80,16 +80,14 @@ def _post_url(username: str, item: dict) -> str:
     return f"https://www.instagram.com/p/{code}/" if code else f"https://www.instagram.com/{username}/"
 
 
-def fetch_posts(
+def _fetch_sources(
     username: str,
     start_date: date,
     end_date: date,
-    download_images: bool = True,
-) -> tuple[list[RawPost], Optional[str]]:
+) -> tuple[list[Source], Optional[str]]:
     """
-    Fetch posts for *username* whose taken_at falls in [start_date, end_date].
-    Paginates using next_max_id until all posts in the date range are collected
-    or there are no more pages. Returns (posts, error_message).
+    Fetch posts for one username and return (sources, error).
+    Paginates until all posts in the date range are collected.
     """
     base_url = (
         f"https://www.instagram.com/api/v1/feed/user/"
@@ -102,7 +100,7 @@ def fetch_posts(
         "Referer": f"https://www.instagram.com/{username}/",
     }
 
-    posts: list[RawPost] = []
+    sources: list[Source] = []
     next_max_id: Optional[str] = None
     seen: set[str] = set()
 
@@ -113,7 +111,7 @@ def fetch_posts(
             with urllib.request.urlopen(req, timeout=30) as r:
                 data = json.loads(r.read().decode("utf-8", "replace"))
         except Exception as e:
-            return posts, str(e)
+            return sources, str(e)
 
         items = data.get("items") or []
         if not items:
@@ -138,18 +136,14 @@ def fetch_posts(
 
             caption = _clean((item.get("caption") or {}).get("text") or "")
             img_url = _img_url(item)
-            image_path = _download_image(img_url, username) if download_images and img_url else None
+            image_path = _download_image(img_url, username) if img_url else None
 
-            posts.append(RawPost(
-                source="instagram",
-                username=username,
-                post_url=_post_url(username, item),
-                taken_at=post_dt.isoformat(),
-                caption=caption,
-                image_path=image_path,
+            sources.append(Source(
+                source=_post_url(username, item),
+                text=caption,
+                image=image_path,
             ))
 
-        # Stop paginating once we've gone past the start of the date range
         if oldest_in_page and oldest_in_page < start_date:
             break
 
@@ -159,31 +153,39 @@ def fetch_posts(
 
         time.sleep(0.3)
 
-    return posts, None
+    return sources, None
 
 
-def scrape_channels(
+def scrape_instagram(
     channels: list[str],
     start_date: date,
     end_date: date,
-    download_images: bool = True,
-) -> tuple[list[RawPost], list[dict]]:
+    api_key: str,
+    *,
+    ocr_enabled: bool = config.OCR_ENABLED,
+    batch_size: int = config.BATCH_SIZE,
+    model: str = config.OPENAI_MODEL,
+) -> tuple[list[dict], int]:
     """
-    Scrape all channels and return (raw_posts, errors).
-    Errors are dicts with keys 'username' and 'error'.
+    Scrape Instagram channels and extract events.
+
+    Returns:
+        (events, posts_scraped) — list of created event rows and the count
+        of posts that were successfully fetched from Instagram.
     """
-    all_posts: list[RawPost] = []
-    errors: list[dict] = []
+    sources: list[Source] = []
 
     for raw in channels:
         username = username_from_input(raw)
         if not username:
             continue
-        posts, err = fetch_posts(username, start_date, end_date, download_images)
+        channel_sources, err = _fetch_sources(username, start_date, end_date)
         if err:
-            errors.append({"username": username, "error": err})
-        else:
-            all_posts.extend(posts)
+            print(f"[instagram] {username}: {err}")
+        sources.extend(channel_sources)
         time.sleep(0.5)
 
-    return all_posts, errors
+    posts_scraped = len(sources)
+    events = create_events(sources, "Instagram", api_key,
+                    ocr_enabled=ocr_enabled, batch_size=batch_size, model=model)
+    return events, posts_scraped

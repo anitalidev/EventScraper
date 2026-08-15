@@ -1,8 +1,8 @@
 """
-Generalized scraping pipeline.
+General event creation method.
 
-All scrapers will eventually feed into scrape(). Sources are kept in memory
-only — nothing is written to disk except final thumbnail crops.
+All scrapers feed into create_events(). Sources are kept in memory only —
+nothing is written to disk except final thumbnail crops.
 """
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ def _build_user_message(batch: list[Source]) -> str:
 
 # ── Main function ─────────────────────────────────────────────────────────────
 
-def scrape(
+def create_events(
     sources: list[Source],
     source_name: str,
     api_key: str,
@@ -129,7 +129,7 @@ def scrape(
     model: str = config.OPENAI_MODEL,
 ) -> list[dict]:
     """
-    Generalized scraping pipeline.
+    General event creation method.
 
     Args:
         sources:     Content items from any scraper (in-memory only, never persisted).
