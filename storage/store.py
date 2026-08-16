@@ -52,6 +52,11 @@ CREATE TABLE IF NOT EXISTS events (
     approval_error          TEXT
 );
 
+CREATE TABLE IF NOT EXISTS published_keys (
+    dedupe_key  TEXT PRIMARY KEY,
+    published_at TEXT NOT NULL
+);
+
 """
 
 _MIGRATIONS = [
@@ -216,10 +221,14 @@ def status_counts() -> dict[str, int]:
 
 
 def fetch_dedupe_keys() -> set[str]:
-    """Return all dedupe_key values currently in the DB."""
+    """Return all dedupe keys — active events plus published tombstones."""
     conn = _connect()
     rows = conn.execute(
-        "SELECT dedupe_key FROM events WHERE dedupe_key IS NOT NULL"
+        """
+        SELECT dedupe_key FROM events WHERE dedupe_key IS NOT NULL
+        UNION
+        SELECT dedupe_key FROM published_keys
+        """
     ).fetchall()
     conn.close()
     return {r["dedupe_key"] for r in rows}
@@ -268,13 +277,49 @@ def insert_scraped_event(
     return dict(row) if row else None
 
 
+def _delete_thumbnail(image_url: Optional[str]) -> None:
+    """Delete a thumbnail file from local storage given its /api/images/<name> URL."""
+    if not image_url or not image_url.startswith("/api/images/"):
+        return
+    filename = image_url.removeprefix("/api/images/")
+    path = os.path.join(config.IMG_DIR, filename)
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def delete_event(event_id: int) -> bool:
+    """Delete an event and cascade-delete its thumbnail from local storage."""
     conn = _connect()
+    row = conn.execute("SELECT image_url FROM events WHERE id = ?", (event_id,)).fetchone()
+    if row:
+        _delete_thumbnail(row["image_url"])
     cur = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
     deleted = cur.rowcount > 0
     conn.commit()
     conn.close()
     return deleted
+
+
+def bulk_delete(event_ids: list[int]) -> int:
+    """Delete multiple events and cascade-delete their thumbnails from local storage."""
+    if not event_ids:
+        return 0
+    placeholders = ",".join("?" * len(event_ids))
+    conn = _connect()
+    rows = conn.execute(
+        f"SELECT image_url FROM events WHERE id IN ({placeholders})", event_ids
+    ).fetchall()
+    for row in rows:
+        _delete_thumbnail(row["image_url"])
+    cur = conn.execute(
+        f"DELETE FROM events WHERE id IN ({placeholders})", event_ids
+    )
+    count = cur.rowcount
+    conn.commit()
+    conn.close()
+    return count
 
 
 def record_ubc_publish(
@@ -284,12 +329,17 @@ def record_ubc_publish(
 ) -> Optional[dict]:
     """
     After a UBC Discovery publish attempt, store the result.
-    On success: deletes the event row from local DB (image already removed by _upload_image).
-    On failure: sets approval_error, leaves status unchanged.
+    On success: cascade-deletes thumbnail, writes dedupe tombstone, deletes event row.
+    On failure: sets approval_error, leaves event unchanged.
     """
     conn = _connect()
     if ubc_event_id is not None:
         row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if row and row["dedupe_key"]:
+            conn.execute(
+                "INSERT OR IGNORE INTO published_keys (dedupe_key, published_at) VALUES (?, ?)",
+                (row["dedupe_key"], datetime.now(timezone.utc).isoformat()),
+            )
         conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
     else:
         conn.execute(
@@ -300,17 +350,3 @@ def record_ubc_publish(
     conn.commit()
     conn.close()
     return dict(row) if row else None
-
-
-def bulk_delete(event_ids: list[int]) -> int:
-    if not event_ids:
-        return 0
-    placeholders = ",".join("?" * len(event_ids))
-    conn = _connect()
-    cur = conn.execute(
-        f"DELETE FROM events WHERE id IN ({placeholders})", event_ids
-    )
-    count = cur.rowcount
-    conn.commit()
-    conn.close()
-    return count

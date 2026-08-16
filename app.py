@@ -153,15 +153,9 @@ def api_hub():
 
     ubc_events_raw = ubc_list_events()
 
-    # Build a set of UBC Discovery IDs already linked from scraper events
-    linked_ubc_ids = {e["ubc_discovery_event_id"] for e in scraper_events if e.get("ubc_discovery_event_id")}
-
-    # Normalise UBC Discovery events into a common shape
     ubc_events = []
     for ev in ubc_events_raw:
         ubc_id = str(ev.get("id", ""))
-        if ubc_id in linked_ubc_ids:
-            continue  # already represented by a scraper event
         ubc_events.append({
             "_source": "ubc_discovery",
             "id": ubc_id,
@@ -182,7 +176,6 @@ def api_hub():
 
     for ev in scraper_events:
         ev["_source"] = "scraper"
-        ev["_also_in_ubc"] = bool(ev.get("ubc_discovery_event_id"))
 
     combined = scraper_events + ubc_events
     combined.sort(key=lambda e: (e.get("date") or "0000-00-00", e.get("time") or ""), reverse=True)

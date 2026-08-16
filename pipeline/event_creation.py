@@ -7,9 +7,8 @@ nothing is written to disk except final thumbnail crops.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from openai import OpenAI
@@ -26,7 +25,7 @@ from storage import store
 @dataclass
 class Source:
     """One content item produced by any scraper. Never persisted to disk."""
-    source: str                      # Instagram post URL, Gmail message link, etc.
+    source: str                      # Instagram post URL, Gmail sender email, etc.
     text: str                        # Caption, email body, etc.
     image: Optional[str] = None      # Temp path to downloaded image
     ocr_text: Optional[str] = None   # Populated during the OCR pass if enabled
@@ -42,7 +41,7 @@ class Event:
     description: str
     location: Optional[str]
     category_tags: list[str]
-    thumbnail: Optional[str] = None  # Local path to cropped thumbnail image, if any
+    thumbnail: Optional[str] = None  # Local path to cropped thumbnail, if any
 
 
 # ── OpenAI response schema (internal) ────────────────────────────────────────
@@ -92,7 +91,7 @@ For category_tags choose one or more from: social, career, academic, arts, cultu
 outdoors, sports, food, wellness, volunteering."""
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _dedupe_key(title: str, source: str, date: Optional[str], time: Optional[str]) -> str:
     combined = "|".join([
@@ -117,7 +116,122 @@ def _build_user_message(batch: list[Source]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-# ── Main function ─────────────────────────────────────────────────────────────
+# ── Pipeline stages ───────────────────────────────────────────────────────────
+
+def _run_ocr(sources: list[Source]) -> None:
+    """
+    OCR pass — for every source that has an image, run Tesseract and store
+    the result as ocr_text on that source. Mutates sources in-place.
+    """
+    for src in sources:
+        if src.image:
+            text = ocr.extract_text(src.image)
+            if text:
+                src.ocr_text = text
+
+
+def _extract_batch(client: OpenAI, batch: list[Source], model: str) -> list[_ExtractedEvent]:
+    """
+    Send one batch of sources to OpenAI and return the raw extracted events.
+    Returns an empty list if the API call fails.
+    """
+    try:
+        response = client.beta.chat.completions.parse(
+            model=model,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user",   "content": _build_user_message(batch)},
+            ],
+            response_format=_BatchResponse,
+            temperature=0,
+        )
+        parsed = response.choices[0].message.parsed
+        return parsed.events if parsed else []
+    except Exception as e:
+        print(f"[event_creation] OpenAI batch failed: {e}")
+        return []
+
+
+def _build_events(
+    extracted: list[_ExtractedEvent],
+    source_to_image: dict[str, str],
+    existing_keys: set[str],
+    api_key: str,
+    model: str,
+) -> list[Event]:
+    """
+    Dedup, generate thumbnails, and build Event objects from one batch's
+    extracted results. Updates existing_keys in-place to catch intra-run
+    duplicates across batches.
+    """
+    events: list[Event] = []
+
+    for item in extracted:
+        key = _dedupe_key(item.title, item.source, item.date, item.time)
+        if key in existing_keys:
+            continue
+        existing_keys.add(key)
+
+        thumbnail: Optional[str] = None
+        image_path = source_to_image.get(item.source)
+        if image_path:
+            thumbnail = generate_thumbnail(image_path, item.title, api_key=api_key, model=model)
+
+        events.append(Event(
+            source=item.source,
+            title=item.title,
+            date=item.date,
+            time=item.time,
+            description=item.description,
+            location=item.location,
+            category_tags=item.category_tags,
+            thumbnail=thumbnail,
+        ))
+
+    return events
+
+
+def _cleanup_batch_images(batch: list[Source]) -> None:
+    """
+    Delete all source images for this batch from local disk and clear
+    their paths. Called after extraction and thumbnail generation are done.
+    """
+    for src in batch:
+        if src.image:
+            try:
+                os.remove(src.image)
+            except OSError:
+                pass
+            src.image = ""
+
+
+def _save_events(events: list[Event], source_name: str) -> list[dict]:
+    """
+    Persist all events to the local SQLite DB and return the created rows.
+    source_name ("Instagram", "Gmail", etc.) is added here, not earlier.
+    """
+    created: list[dict] = []
+
+    for event in events:
+        row = store.insert_scraped_event(
+            dedupe_key=_dedupe_key(event.title, event.source, event.date, event.time),
+            source_url=event.source,
+            source_label=source_name,
+            title=event.title,
+            date=event.date,
+            time=event.time,
+            description=event.description,
+            location=event.location,
+            category_tags=event.category_tags,
+            image_url=event.thumbnail,
+        )
+        if row:
+            created.append(row)
+
+    return created
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 def create_events(
     sources: list[Source],
@@ -145,98 +259,20 @@ def create_events(
     if not sources:
         return []
 
-    # ── 1. OCR pass ───────────────────────────────────────────────────────────
     if ocr_enabled and ocr.is_available():
-        for src in sources:
-            if src.image:
-                text = ocr.extract_text(src.image)
-                if text:
-                    src.ocr_text = text
+        _run_ocr(sources)
 
-    # ── 2. Extract events in batches ──────────────────────────────────────────
     client = OpenAI(api_key=api_key)
-
-    # Fetch all existing dedupe keys once. New keys are added as events are
-    # accepted, so intra-run duplicates across batches are also caught.
     existing_keys: set[str] = store.fetch_dedupe_keys()
     current_events: list[Event] = []
 
     for batch in _chunk(sources, batch_size):
-        # Call OpenAI for this batch
-        try:
-            response = client.beta.chat.completions.parse(
-                model=model,
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user",   "content": _build_user_message(batch)},
-                ],
-                response_format=_BatchResponse,
-                temperature=0,
-            )
-            parsed = response.choices[0].message.parsed
-        except Exception as e:
-            print(f"[scrape] OpenAI batch failed: {e}")
-            parsed = None
+        source_to_image: dict[str, str] = {
+            src.source: src.image for src in batch if src.image
+        }
+        extracted = _extract_batch(client, batch, model)
+        batch_events = _build_events(extracted, source_to_image, existing_keys, api_key, model)
+        current_events.extend(batch_events)
+        _cleanup_batch_images(batch)
 
-        if parsed is not None:
-            # Map source identifier → image path for this batch
-            source_to_image: dict[str, str] = {
-                src.source: src.image
-                for src in batch
-                if src.image
-            }
-
-            for extracted in parsed.events:
-                key = _dedupe_key(extracted.title, extracted.source, extracted.date, extracted.time)
-                if key in existing_keys:
-                    continue
-                existing_keys.add(key)
-
-                # Generate thumbnail now, while the image is still on disk
-                thumbnail: Optional[str] = None
-                image_path = source_to_image.get(extracted.source)
-                if image_path:
-                    thumbnail = generate_thumbnail(
-                        image_path, extracted.title, api_key=api_key, model=model
-                    )
-
-                current_events.append(Event(
-                    source=extracted.source,
-                    title=extracted.title,
-                    date=extracted.date,
-                    time=extracted.time,
-                    description=extracted.description,
-                    location=extracted.location,
-                    category_tags=extracted.category_tags,
-                    thumbnail=thumbnail,
-                ))
-
-        # Delete every source image in this batch now that we're done with it
-        for src in batch:
-            if src.image:
-                try:
-                    os.remove(src.image)
-                except OSError:
-                    pass
-                src.image = ""
-
-    # ── 3. Save events to local DB ────────────────────────────────────────────
-    created: list[dict] = []
-
-    for event in current_events:
-        row = store.insert_scraped_event(
-            dedupe_key=_dedupe_key(event.title, event.source, event.date, event.time),
-            source_url=event.source,
-            source_label=source_name,
-            title=event.title,
-            date=event.date,
-            time=event.time,
-            description=event.description,
-            location=event.location,
-            category_tags=event.category_tags,
-            image_url=event.thumbnail,
-        )
-        if row:
-            created.append(row)
-
-    return created
+    return _save_events(current_events, source_name)
